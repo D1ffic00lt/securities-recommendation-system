@@ -1,3 +1,3 @@
 from .api import *
 
-__all__ = ("APIParser", )
+__all__ = ("APIParser",)

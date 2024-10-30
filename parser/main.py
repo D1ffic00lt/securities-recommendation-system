@@ -1,4 +1,3 @@
-
 def main():
     from utils.api import APIParser
 
@@ -7,6 +6,7 @@ def main():
 
     parser = APIParser(api_token)
     shares = parser.parse_shares()
+
 
 if __name__ == "__main__":
     main()
