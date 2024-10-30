@@ -4,7 +4,7 @@ import pandas as pd
 from datetime import datetime
 from typing import Any, Union
 from tqdm.auto import tqdm
-from tinkoff.invest import Client, InstrumentStatus
+from tinkoff.invest import Client, GetLastPricesResponse, InstrumentStatus
 from tinkoff.invest.schemas import (
     BondsResponse,
     CurrenciesResponse,
@@ -38,6 +38,8 @@ class APIParser:
         self._token: str = token
         self._client: Client = Client(self._token)
         self._channel: Services
+
+        self.figis_prices = {}
 
     def __enter__(self) -> "APIParser":
         """
@@ -73,7 +75,7 @@ class APIParser:
         def wrapper(self: "APIParser", *args: Any, **kwargs: Any) -> Any:
             if getattr(self, "_channel", None) is not None:
                 return func(self, *args, **kwargs)
-            with self as self:
+            with self as self:  # FIXME: doesn't work
                 return func(self, *args, **kwargs)
 
         return wrapper
@@ -126,8 +128,39 @@ class APIParser:
             instrument_status=InstrumentStatus.INSTRUMENT_STATUS_BASE
         )
 
+    @connection
+    def exchange_rate_parsing(self, figis: list[str]) -> list[float]:
+        """
+        Retrieves the latest exchange rates for a list of instrument FIGIs.
+
+        Args:
+            figis (list[str]): A list of FIGI strings representing financial instruments.
+
+        Returns:
+            list[float]: The latest exchange rates for a list of instrument FIGIs.
+        """
+        response: GetLastPricesResponse = self._channel.market_data.get_last_prices(
+            figi=figis
+        )
+
+        prices = list(
+            map(lambda x: self._validate_value(x.price), response.last_prices)
+        )
+        figis = dict(zip(figis, prices))
+
+        self.figis_prices.update(figis)
+
+        return prices
+
     @singledispatchmethod
-    def write(self, data: Any, filename: str, *, use_tqdm: bool = False) -> None:
+    def write(
+        self,
+        data: Any,
+        filename: str,
+        *,
+        use_tqdm: bool = False,
+        include_price: bool = False,
+    ) -> None:
         """
         Writes data from a Tinkoff API response to a CSV file. The method is dispatched based on data type.
 
@@ -135,6 +168,7 @@ class APIParser:
             data: The Tinkoff API response data.
             filename (str): The name of the output CSV file.
             use_tqdm (bool): Whether to display a progress bar using tqdm.
+            include_price (bool): Whether to include the price information in the CSV file.
 
         Raises:
             ValueError: If the data type is invalid.
@@ -142,7 +176,14 @@ class APIParser:
         raise ValueError("Invalid data type. (%s)" % data.__class__.__name__)
 
     @write.register
-    def _(self, data: SharesResponse, filename: str, *, use_tqdm: bool = False) -> None:
+    def _(
+        self,
+        data: SharesResponse,
+        filename: str,
+        *,
+        use_tqdm: bool = False,
+        include_price: bool = False,
+    ) -> None:
         """
         Writes shares data to a CSV file.
 
@@ -150,16 +191,25 @@ class APIParser:
             data (SharesResponse): The response data for shares.
             filename (str): The name of the CSV file to write.
             use_tqdm (bool): Whether to display a progress bar.
+            include_price (bool): Whether to include the price information in the CSV file.
         """
         self._generate_csv(
             columns=ResponseColumns.SHARES.value,
             data=data,
             filename=filename,
             use_tqdm=use_tqdm,
+            include_price=include_price,
         )
 
     @write.register
-    def _(self, data: BondsResponse, filename: str, *, use_tqdm: bool = False) -> None:
+    def _(
+        self,
+        data: BondsResponse,
+        filename: str,
+        *,
+        use_tqdm: bool = False,
+        include_price: bool = False,
+    ) -> None:
         """
         Writes bonds data to a CSV file.
 
@@ -167,16 +217,25 @@ class APIParser:
             data (BondsResponse): The response data for bonds.
             filename (str): The name of the CSV file to write.
             use_tqdm (bool): Whether to display a progress bar.
+            include_price (bool): Whether to include the price information in the CSV file.
         """
         self._generate_csv(
             columns=ResponseColumns.BONDS.value,
             data=data,
             filename=filename,
             use_tqdm=use_tqdm,
+            include_price=include_price,
         )
 
     @write.register
-    def _(self, data: EtfsResponse, filename: str, *, use_tqdm: bool = False) -> None:
+    def _(
+        self,
+        data: EtfsResponse,
+        filename: str,
+        *,
+        use_tqdm: bool = False,
+        include_price: bool = False,
+    ) -> None:
         """
         Writes ETF data to a CSV file.
 
@@ -184,17 +243,24 @@ class APIParser:
             data (EtfsResponse): The response data for ETFs.
             filename (str): The name of the CSV file to write.
             use_tqdm (bool): Whether to display a progress bar.
+            include_price (bool): Whether to include the price information in the CSV file.
         """
         self._generate_csv(
             columns=ResponseColumns.ETFS.value,
             data=data,
             filename=filename,
             use_tqdm=use_tqdm,
+            include_price=include_price,
         )
 
     @write.register
     def _(
-        self, data: CurrenciesResponse, filename: str, *, use_tqdm: bool = False
+        self,
+        data: CurrenciesResponse,
+        filename: str,
+        *,
+        use_tqdm: bool = False,
+        include_price: bool = False,
     ) -> None:
         """
         Writes currencies data to a CSV file.
@@ -209,6 +275,7 @@ class APIParser:
             data=data,
             filename=filename,
             use_tqdm=use_tqdm,
+            include_price=include_price,
         )
 
     def _generate_csv(
@@ -217,6 +284,7 @@ class APIParser:
         data: _response_types,
         filename: str,
         use_tqdm: bool = False,
+        include_price: bool = False,
     ) -> None:
         """
         Generates a CSV file from the Tinkoff API data response.
@@ -226,14 +294,18 @@ class APIParser:
             data (_response_types): The Tinkoff API data to write.
             filename (str): The output file name.
             use_tqdm (bool): Whether to use a progress bar during the data generation.
+            include_price (bool): Whether to include the price in the output dataframe.
         """
         iterator = tqdm(data.instruments) if use_tqdm else data.instruments
         data = [
             {attr: self._validate_value(getattr(row, attr)) for attr in columns}
             for row in iterator
         ]
-
         dataframe = pd.DataFrame(data, columns=columns)
+        if include_price:
+            dataframe["price"] = self.exchange_rate_parsing(
+                figis=dataframe["figi"].tolist()
+            )
         dataframe.to_csv(filename, index=False)
 
     @staticmethod
@@ -257,10 +329,5 @@ class APIParser:
             case _:
                 return value
 
-
-if __name__ == "__main__":
-    with open("../../secrets/tinkoff_token.txt", "r") as f:
-        api_token = f.read().strip()
-
-    parser = APIParser(api_token)
-    shares = parser.parse_shares()
+    def __repr__(self):
+        return "APIParser({})".format(getattr(self, "_channel", None) is not None)
