@@ -5,7 +5,7 @@ __all__ = ("ResponseColumns", )
 class ResponseColumns(Enum):
     SHARES = [
         "figi", "ticker", "class_code", "isin",
-        "currency", "name", "exchange", "ipo_date",
+        "currency", "name", "exchange", "ipo_date", "nominal",
         "issue_size", "country_of_risk", "country_of_risk_name",
         "sector", "issue_size_plan", "liquidity_flag", "lot"
     ]
