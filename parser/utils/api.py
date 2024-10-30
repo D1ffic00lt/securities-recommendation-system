@@ -1,19 +1,22 @@
 import os
 import pandas as pd
 
+from datetime import datetime
 from typing import Any, Union
+from tqdm.auto import tqdm
 from tinkoff.invest import Client, InstrumentStatus
 from tinkoff.invest.schemas import (
     BondsResponse, CurrenciesResponse, EtfsResponse, RiskLevel,
     SharesResponse
 )
 from tinkoff.invest.services import Services
-from tqdm.auto import tqdm
-from functools import singledispatchmethod
-from datetime import datetime
+from functools import singledispatchmethod, wraps
 
 from ._types import *
 from ._properties import *
+
+
+__all__ = ("APIParser", )
 
 class APIParser:
     def __init__(self, token: str = os.environ.get('TINKOFF_TOKEN', None)):
@@ -31,21 +34,35 @@ class APIParser:
         self._client.__exit__(exc_type, exc_val, exc_tb)
         self._channel = None
 
+    @staticmethod
+    def connection(func):
+        @wraps(func)
+        def wrapper(self: "APIParser", *args, **kwargs):
+            if getattr(self, '_channel', None) is not None:
+                return func(self, *args, **kwargs)
+            with self as self:
+                return func(self, *args, **kwargs)
+        return wrapper
+
+    @connection
     def parse_shares(self) -> SharesResponse:
         return self._channel.instruments.shares(
             instrument_status=InstrumentStatus.INSTRUMENT_STATUS_BASE
         )
 
+    @connection
     def parse_bonds(self) -> BondsResponse:
         return self._channel.instruments.bonds(
             instrument_status=InstrumentStatus.INSTRUMENT_STATUS_BASE
         )
 
+    @connection
     def parse_etfs(self) -> EtfsResponse:
         return self._channel.instruments.etfs(
             instrument_status=InstrumentStatus.INSTRUMENT_STATUS_BASE
         )
 
+    @connection
     def parse_currencies(self) -> CurrenciesResponse:
         return self._channel.instruments.currencies(
             instrument_status=InstrumentStatus.INSTRUMENT_STATUS_BASE
@@ -124,6 +141,5 @@ if __name__ == '__main__':
     with open("../../secrets/tinkoff_token.txt", "r") as f:
         api_token = f.read().strip()
 
-    with APIParser(api_token) as parser:
-        shares = parser.parse_shares()
-        parser.write(shares, "test_data.csv", use_tqdm=True)
+    parser = APIParser(api_token)
+    shares = parser.parse_shares()
