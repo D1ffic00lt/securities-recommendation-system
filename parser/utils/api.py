@@ -14,6 +14,7 @@ from tinkoff.invest.schemas import (
 )
 from tinkoff.invest.services import Services
 from functools import singledispatchmethod, wraps
+from collections import defaultdict
 
 from ._types import *
 from ._properties import *
@@ -36,10 +37,9 @@ class APIParser:
         if token is None:
             raise ValueError("Tinkoff token must be provided")
         self._token: str = token
-        self._client: Client = Client(self._token)
-        self._channel: Services
-
-        self.figis_prices = {}
+        self._client: Client | None = None
+        self._channel: Services | None = None
+        self.figis_prices = defaultdict(int)
 
     def __enter__(self) -> "APIParser":
         """
@@ -48,6 +48,18 @@ class APIParser:
         Returns:
             APIParser: The instance of the APIParser with an active client connection.
         """
+        self._client = Client(self._token)
+        # it's interesting that in Tinkoff library there is no possibility
+        # to open 2 connections (not parallel) from one client,
+        # I don't know if it's a bug, but I spent at least 2 days to solve this problem.
+        # --------------------------------
+        # client = Client(...)
+        # with client as channel:
+        #     ...  # some channel work
+        # with client as channel:
+        #     ...  # some channel work
+        # --------------------------------
+        # just try running this, and it will give ValueError: Cannot invoke RPC on closed channel!
         self._channel = self._client.__enter__()
         return self
 
@@ -75,7 +87,7 @@ class APIParser:
         def wrapper(self: "APIParser", *args: Any, **kwargs: Any) -> Any:
             if getattr(self, "_channel", None) is not None:
                 return func(self, *args, **kwargs)
-            with self as self:  # FIXME: doesn't work
+            with self:
                 return func(self, *args, **kwargs)
 
         return wrapper
