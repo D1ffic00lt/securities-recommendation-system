@@ -338,7 +338,7 @@ class APIParser(object):
         include_price: bool = False,
         convert_to_rubles: bool = False,
         skip_unknown: bool = False,
-        unknown_value: Any = np.nan
+        unknown_value: Any = np.nan,
     ) -> None:
         """
         Generates a CSV file from the Tinkoff API data response.
@@ -375,7 +375,9 @@ class APIParser(object):
                     raise ValueError(f"Some currency is not supported. ({units_diff})")
                 currencies_prices = self.currencies_prices.copy()
                 if skip_unknown:
-                    currencies_prices = defaultdict(lambda: unknown_value, currencies_prices)
+                    currencies_prices = defaultdict(
+                        lambda: unknown_value, currencies_prices
+                    )
                 dataframe["rub_price"] = dataframe.price * dataframe.currency.map(
                     lambda x: currencies_prices[x]
                 )
