@@ -1,4 +1,6 @@
 import os
+import warnings
+import numpy as np
 import pandas as pd
 
 from datetime import datetime
@@ -18,7 +20,6 @@ from collections import defaultdict
 
 from ._types import *
 from ._properties import *
-
 
 __all__ = ("APIParser",)
 
@@ -40,6 +41,7 @@ class APIParser(object):
         self._client: Client | None = None
         self._channel: Services | None = None
         self.figis_prices = defaultdict(int)
+        self.currencies_prices = {"rub": 1.0}
 
     def __enter__(self) -> "APIParser":
         """
@@ -172,6 +174,9 @@ class APIParser(object):
         *,
         use_tqdm: bool = False,
         include_price: bool = False,
+        convert_to_rubles: bool = False,
+        skip_unknown: bool = False,
+        unknown_value: Any = np.nan,
     ) -> None:
         """
         Writes data from a Tinkoff API response to a CSV file. The method is dispatched based on data type.
@@ -181,7 +186,9 @@ class APIParser(object):
             filename (str): The name of the output CSV file.
             use_tqdm (bool): Whether to display a progress bar using tqdm.
             include_price (bool): Whether to include the price information in the CSV file.
-
+            convert_to_rubles (bool): Whether to convert the price information to rubles.
+            skip_unknown (bool): Whether to skip unknown currencies.
+            unknown_value (Any): The value to use for unknown currencies.
         Raises:
             ValueError: If the data type is invalid.
         """
@@ -195,6 +202,9 @@ class APIParser(object):
         *,
         use_tqdm: bool = False,
         include_price: bool = False,
+        convert_to_rubles: bool = False,
+        skip_unknown: bool = False,
+        unknown_value: Any = np.nan,
     ) -> None:
         """
         Writes shares data to a CSV file.
@@ -204,6 +214,8 @@ class APIParser(object):
             filename (str): The name of the CSV file to write.
             use_tqdm (bool): Whether to display a progress bar.
             include_price (bool): Whether to include the price information in the CSV file.
+            skip_unknown (bool): Whether to skip unknown currencies.
+            unknown_value (Any): The value to use for unknown currencies.
         """
         self._generate_csv(
             columns=ResponseColumns.SHARES.value,
@@ -211,6 +223,9 @@ class APIParser(object):
             filename=filename,
             use_tqdm=use_tqdm,
             include_price=include_price,
+            convert_to_rubles=convert_to_rubles,
+            skip_unknown=skip_unknown,
+            unknown_value=unknown_value,
         )
 
     @write.register
@@ -221,6 +236,9 @@ class APIParser(object):
         *,
         use_tqdm: bool = False,
         include_price: bool = False,
+        convert_to_rubles: bool = False,
+        skip_unknown: bool = False,
+        unknown_value: Any = np.nan,
     ) -> None:
         """
         Writes bonds data to a CSV file.
@@ -230,6 +248,8 @@ class APIParser(object):
             filename (str): The name of the CSV file to write.
             use_tqdm (bool): Whether to display a progress bar.
             include_price (bool): Whether to include the price information in the CSV file.
+            skip_unknown (bool): Whether to skip unknown currencies.
+            unknown_value (Any): The value to use for unknown currencies.
         """
         self._generate_csv(
             columns=ResponseColumns.BONDS.value,
@@ -237,6 +257,9 @@ class APIParser(object):
             filename=filename,
             use_tqdm=use_tqdm,
             include_price=include_price,
+            convert_to_rubles=convert_to_rubles,
+            skip_unknown=skip_unknown,
+            unknown_value=unknown_value,
         )
 
     @write.register
@@ -247,6 +270,9 @@ class APIParser(object):
         *,
         use_tqdm: bool = False,
         include_price: bool = False,
+        convert_to_rubles: bool = False,
+        skip_unknown: bool = False,
+        unknown_value: Any = np.nan,
     ) -> None:
         """
         Writes ETF data to a CSV file.
@@ -256,6 +282,8 @@ class APIParser(object):
             filename (str): The name of the CSV file to write.
             use_tqdm (bool): Whether to display a progress bar.
             include_price (bool): Whether to include the price information in the CSV file.
+            skip_unknown (bool): Whether to skip unknown currencies.
+            unknown_value (Any): The value to use for unknown currencies.
         """
         self._generate_csv(
             columns=ResponseColumns.ETFS.value,
@@ -263,6 +291,9 @@ class APIParser(object):
             filename=filename,
             use_tqdm=use_tqdm,
             include_price=include_price,
+            convert_to_rubles=convert_to_rubles,
+            skip_unknown=skip_unknown,
+            unknown_value=unknown_value,
         )
 
     @write.register
@@ -273,6 +304,9 @@ class APIParser(object):
         *,
         use_tqdm: bool = False,
         include_price: bool = False,
+        convert_to_rubles: bool = False,
+        skip_unknown: bool = False,
+        unknown_value: Any = np.nan,
     ) -> None:
         """
         Writes currencies data to a CSV file.
@@ -281,6 +315,8 @@ class APIParser(object):
             data (CurrenciesResponse): The response data for currencies.
             filename (str): The name of the CSV file to write.
             use_tqdm (bool): Whether to display a progress bar.
+            skip_unknown (bool): Whether to skip unknown currencies.
+            unknown_value (Any): The value to use for unknown currencies.
         """
         self._generate_csv(
             columns=ResponseColumns.CURRENCIES.value,
@@ -288,6 +324,9 @@ class APIParser(object):
             filename=filename,
             use_tqdm=use_tqdm,
             include_price=include_price,
+            convert_to_rubles=convert_to_rubles,
+            skip_unknown=skip_unknown,
+            unknown_value=unknown_value,
         )
 
     def _generate_csv(
@@ -297,6 +336,9 @@ class APIParser(object):
         filename: str,
         use_tqdm: bool = False,
         include_price: bool = False,
+        convert_to_rubles: bool = False,
+        skip_unknown: bool = False,
+        unknown_value: Any = np.nan
     ) -> None:
         """
         Generates a CSV file from the Tinkoff API data response.
@@ -307,6 +349,8 @@ class APIParser(object):
             filename (str): The output file name.
             use_tqdm (bool): Whether to use a progress bar during the data generation.
             include_price (bool): Whether to include the price in the output dataframe.
+            skip_unknown (bool): Whether to skip unknown currencies.
+            unknown_value (Any): The value to use for unknown currencies.
         """
         iterator = tqdm(data.instruments) if use_tqdm else data.instruments
         data = [
@@ -318,7 +362,48 @@ class APIParser(object):
             dataframe["price"] = self.exchange_rate_parsing(
                 figis=dataframe["figi"].tolist()
             )
+            if convert_to_rubles:
+                if len(self.currencies_prices) == 1:
+                    warnings.warn(
+                        "Currencies data is only available for one currency. "
+                        "Use get_currencies_exchange_rates before calling write"
+                    )
+                units_diff = set(dataframe.currency.unique().tolist()) - set(
+                    self.currencies_prices.keys()
+                )
+                if len(units_diff) != 0 and not skip_unknown:
+                    raise ValueError(f"Some currency is not supported. ({units_diff})")
+                currencies_prices = self.currencies_prices.copy()
+                if skip_unknown:
+                    currencies_prices = defaultdict(lambda: unknown_value, currencies_prices)
+                dataframe["rub_price"] = dataframe.price * dataframe.currency.map(
+                    lambda x: currencies_prices[x]
+                )
         dataframe.to_csv(filename, index=False)
+
+    @connection
+    def get_currencies_exchange_rates(
+        self, *, use_tqdm: bool = False
+    ) -> dict[str, float]:
+        currencies = self.parse_currencies()
+        iterator = tqdm(currencies.instruments) if use_tqdm else currencies.instruments
+        data = [
+            {
+                attr: self._validate_value(getattr(row, attr))
+                for attr in ResponseColumns.CURRENCIES.value
+            }
+            for row in iterator
+        ]
+        currencies = pd.DataFrame(data, columns=ResponseColumns.CURRENCIES.value)
+        currencies["price"] = self.exchange_rate_parsing(
+            figis=currencies["figi"].tolist()
+        )
+        self.currencies_prices = {
+            row.iso_currency_name: (row.price / row.nominal)
+            for _, row in currencies.iterrows()
+        }
+        self.currencies_prices["rub"] = 1
+        return self.currencies_prices
 
     @staticmethod
     def _validate_value(value: Any) -> Union[float, str, int]:
