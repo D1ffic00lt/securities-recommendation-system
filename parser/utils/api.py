@@ -23,7 +23,7 @@ from ._properties import *
 __all__ = ("APIParser",)
 
 
-class APIParser:
+class APIParser(object):
     def __init__(self, token: str = os.environ.get("TINKOFF_TOKEN", None)):
         """
         Initializes the APIParser with a Tinkoff API token.
