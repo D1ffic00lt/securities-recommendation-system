@@ -183,12 +183,12 @@ class APIParser(object):
 
         Args:
             data: The Tinkoff API response data.
-            filename (str): The name of the output CSV file.
-            use_tqdm (bool): Whether to display a progress bar using tqdm.
-            include_price (bool): Whether to include the price information in the CSV file.
-            convert_to_rubles (bool): Whether to convert the price information to rubles.
-            skip_unknown (bool): Whether to skip unknown currencies.
-            unknown_value (Any): The value to use for unknown currencies.
+            filename (str): The name of the CSV file to write.
+            use_tqdm (bool, optional): Whether to display a progress bar.
+            include_price (bool, optional): Whether to include the price information in the CSV file.
+            convert_to_rubles (bool, optional): Whether to convert the price information to rubles.
+            skip_unknown (bool, optional): Whether to skip unknown currencies.
+            unknown_value (Any, optional): The value to use for unknown currencies.
         Raises:
             ValueError: If the data type is invalid.
         """
@@ -212,10 +212,11 @@ class APIParser(object):
         Args:
             data (SharesResponse): The response data for shares.
             filename (str): The name of the CSV file to write.
-            use_tqdm (bool): Whether to display a progress bar.
-            include_price (bool): Whether to include the price information in the CSV file.
-            skip_unknown (bool): Whether to skip unknown currencies.
-            unknown_value (Any): The value to use for unknown currencies.
+            use_tqdm (bool, optional): Whether to display a progress bar.
+            include_price (bool, optional): Whether to include the price information in the CSV file.
+            convert_to_rubles (bool, optional): Whether to convert the price information to rubles.
+            skip_unknown (bool, optional): Whether to skip unknown currencies.
+            unknown_value (Any, optional): The value to use for unknown currencies.
         """
         self._generate_csv(
             columns=ResponseColumns.SHARES.value,
@@ -246,10 +247,11 @@ class APIParser(object):
         Args:
             data (BondsResponse): The response data for bonds.
             filename (str): The name of the CSV file to write.
-            use_tqdm (bool): Whether to display a progress bar.
-            include_price (bool): Whether to include the price information in the CSV file.
-            skip_unknown (bool): Whether to skip unknown currencies.
-            unknown_value (Any): The value to use for unknown currencies.
+            use_tqdm (bool, optional): Whether to display a progress bar.
+            include_price (bool, optional): Whether to include the price information in the CSV file.
+            convert_to_rubles (bool, optional): Whether to convert the price information to rubles.
+            skip_unknown (bool, optional): Whether to skip unknown currencies.
+            unknown_value (Any, optional): The value to use for unknown currencies.
         """
         self._generate_csv(
             columns=ResponseColumns.BONDS.value,
@@ -280,10 +282,11 @@ class APIParser(object):
         Args:
             data (EtfsResponse): The response data for ETFs.
             filename (str): The name of the CSV file to write.
-            use_tqdm (bool): Whether to display a progress bar.
-            include_price (bool): Whether to include the price information in the CSV file.
-            skip_unknown (bool): Whether to skip unknown currencies.
-            unknown_value (Any): The value to use for unknown currencies.
+            use_tqdm (bool, optional): Whether to display a progress bar.
+            include_price (bool, optional): Whether to include the price information in the CSV file.
+            convert_to_rubles (bool, optional): Whether to convert the price information to rubles.
+            skip_unknown (bool, optional): Whether to skip unknown currencies.
+            unknown_value (Any, optional): The value to use for unknown currencies.
         """
         self._generate_csv(
             columns=ResponseColumns.ETFS.value,
@@ -314,9 +317,11 @@ class APIParser(object):
         Args:
             data (CurrenciesResponse): The response data for currencies.
             filename (str): The name of the CSV file to write.
-            use_tqdm (bool): Whether to display a progress bar.
-            skip_unknown (bool): Whether to skip unknown currencies.
-            unknown_value (Any): The value to use for unknown currencies.
+            use_tqdm (bool, optional): Whether to display a progress bar.
+            include_price (bool, optional): Whether to include the price information in the CSV file.
+            convert_to_rubles (bool, optional): Whether to convert the price information to rubles.
+            skip_unknown (bool, optional): Whether to skip unknown currencies.
+            unknown_value (Any, optional): The value to use for unknown currencies.
         """
         self._generate_csv(
             columns=ResponseColumns.CURRENCIES.value,
@@ -347,10 +352,10 @@ class APIParser(object):
             columns (list[str]): List of columns to include in the output.
             data (_response_types): The Tinkoff API data to write.
             filename (str): The output file name.
-            use_tqdm (bool): Whether to use a progress bar during the data generation.
-            include_price (bool): Whether to include the price in the output dataframe.
-            skip_unknown (bool): Whether to skip unknown currencies.
-            unknown_value (Any): The value to use for unknown currencies.
+            use_tqdm (bool, optional): Whether to use a progress bar during the data generation.
+            include_price (bool, optional): Whether to include the price in the output dataframe.
+            skip_unknown (bool, optional): Whether to skip unknown currencies.
+            unknown_value (Any, optional): The value to use for unknown currencies.
         """
         iterator = tqdm(data.instruments) if use_tqdm else data.instruments
         data = [
@@ -387,6 +392,16 @@ class APIParser(object):
     def get_currencies_exchange_rates(
         self, *, use_tqdm: bool = False
     ) -> dict[str, float]:
+        """
+        Retrieves and calculates exchange rates for available currencies against RUB.
+
+        Args:
+            use_tqdm (bool, optional): If True, displays a progress bar for currency parsing. Defaults to False.
+
+        Returns:
+            dict[str, float]: A dictionary mapping each currency's ISO code to its exchange rate relative to RUB.
+                              The RUB currency is set to an exchange rate of 1.
+        """
         currencies = self.parse_currencies()
         iterator = tqdm(currencies.instruments) if use_tqdm else currencies.instruments
         data = [
