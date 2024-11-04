@@ -3,12 +3,14 @@ import warnings
 import numpy as np
 import pandas as pd
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Union
+from tinkoff.invest.utils import now
 from tqdm.auto import tqdm
 from tinkoff.invest import Client, GetLastPricesResponse, InstrumentStatus
 from tinkoff.invest.schemas import (
     BondsResponse,
+    CandleInterval,
     CurrenciesResponse,
     EtfsResponse,
     RiskLevel,
@@ -442,6 +444,58 @@ class APIParser(object):
                 return value.value
             case _:
                 return value
+
+    @connection
+    def get_price_history(
+        self,
+        figis: Union[str, list[str]],
+        from_date: datetime = now() - timedelta(days=365),
+        to_date: datetime = now(),
+        interval: CandleInterval = CandleInterval.CANDLE_INTERVAL_DAY,
+        use_tqdm: bool = False,
+    ) -> dict[str, list[dict[str, float]]]:
+        """
+        Retrieves historical price data for a single FIGI or multiple FIGIs over a specified date range,
+        optionally filtered up to a certain date.
+
+        Args:
+            figis (Union[str, list[str]]): A single FIGI string or a list of FIGIs for the instruments.
+            from_date (datetime): Start date for the price history.
+            to_date (datetime): End date for the price history.
+            interval (CandleInterval, optional): The interval for the candle data. Defaults to daily.
+            use_tqdm (bool, optional): If True, displays a progress bar for price history evaluating.
+            False.
+
+        Returns:
+            dict[str, list[dict[str, float]]]: A dictionary where each key is a FIGI, and the value
+                                               is a list of dictionaries with historical price data.
+        """
+        if isinstance(figis, str):
+            figis = [figis]
+
+        price_history = {}
+        iterator = tqdm(figis) if use_tqdm else figis
+
+        for figi in iterator:
+            response = self._channel.market_data.get_candles(
+                figi=figi, from_=from_date, to=to_date, interval=interval
+            )
+
+            candles = [
+                {
+                    "time": candle.time,
+                    "open": candle.open.units + (candle.open.nano / 1e9),
+                    "close": candle.close.units + (candle.close.nano / 1e9),
+                    "high": candle.high.units + (candle.high.nano / 1e9),
+                    "low": candle.low.units + (candle.low.nano / 1e9),
+                    "volume": candle.volume,
+                }
+                for candle in response.candles
+            ]
+
+            price_history[figi] = candles
+
+        return price_history
 
     def __repr__(self):
         return "APIParser({})".format(getattr(self, "_channel", None) is not None)
