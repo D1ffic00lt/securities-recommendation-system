@@ -446,7 +446,7 @@ class APIParser(object):
                 return value
 
     @connection
-    def get_price_history(
+    def parse_price_history(
         self,
         figis: Union[str, list[str]],
         from_date: datetime = now() - timedelta(days=365),
