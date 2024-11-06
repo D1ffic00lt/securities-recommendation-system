@@ -467,8 +467,8 @@ class APIParser(object):
             False.
 
         Returns:
-            dict[str, list[dict[str, float]]]: A dictionary where each key is a FIGI, and the value
-                                               is a list of dictionaries with historical price data.
+            dict[str, pd.DataFrame]: A dict where each key is a FIGI, and the value is a pd.DataFrame with
+            historical price data.
         """
         if isinstance(figis, str):
             figis = [figis]

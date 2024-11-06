@@ -98,6 +98,17 @@ class NormalizedData(dict):
         process_outliers: bool = True,
         **kwargs,
     ):
+        """
+        Initializes the NormalizedData object, normalizes the specified data columns, and processes outliers if needed.
+
+        Args:
+            data (pd.DataFrame): The input DataFrame containing the data to be normalized.
+            keys (Iterable[str]): A list of column names to be normalized.
+            process_outliers (bool, optional): Whether to process and handle outliers in the data. Defaults to True.
+
+        Raises:
+            KeyError: If an attempt is made to modify attributes directly after initialization.
+        """
         super().__init__(*args, **kwargs)
         if data.shape[0] == 0:
             return
@@ -134,18 +145,55 @@ class NormalizedData(dict):
                     dict.__setitem__(self, key, column)
 
     def __setitem__(self, key, value):
+        """
+        Prevents modification of the dictionary attributes after initialization.
+
+        Args:
+            key: The key to be set in the dictionary.
+            value: The value to be associated with the key.
+
+        Raises:
+            KeyError: Always raises a KeyError to prevent attribute modification.
+        """
         raise KeyError("You can't change the attributes.")
 
     @staticmethod
     def to_datetime(value: pd.Series) -> pd.Series:
+        """
+        Converts a pandas Series to datetime objects using a specific date format.
+
+        Args:
+            value (pd.Series): The input pandas Series containing date values.
+
+        Returns:
+            pd.Series: A pandas Series with converted datetime objects.
+        """
         return pd.to_datetime(value, format="%d/%m/%Y")
 
     @staticmethod
     def normalize(series: pd.Series) -> pd.Series:
+        """
+        Normalizes a pandas Series to a 0-10 range based on the minimum and maximum values.
+
+        Args:
+            series (pd.Series): The input pandas Series to be normalized.
+
+        Returns:
+            pd.Series: A pandas Series with normalized values between 0 and 10.
+        """
         return 10 * (series - series.min()) / (series.max() - series.min())
 
     @staticmethod
     def _get_outliers_indexes(data: pd.Series) -> pd.Series:
+        """
+        Identifies outliers in the data based on boxplot statistics.
+
+        Args:
+            data (pd.Series): The input pandas Series containing the data to check for outliers.
+
+        Returns:
+            pd.Series: A boolean Series indicating which values are outliers.
+        """
         outliers = boxplot_stats(data).pop(0)["fliers"]
         return data.isin(outliers)
 
@@ -162,6 +210,21 @@ class SecurityRating(object):
         num_nan_value: Any = 0,
         cat_nan_value: str = "unknown",
     ) -> None:
+        """
+        Initializes the SecurityRating object with shares, bonds, and ETFs data, processes outliers and missing values.
+
+        Args:
+            shares (pd.DataFrame, optional): DataFrame containing shares data. Defaults to None.
+            bonds (pd.DataFrame, optional): DataFrame containing bonds data. Defaults to None.
+            etfs (pd.DataFrame, optional): DataFrame containing ETFs data. Defaults to None.
+            remove_nan_values (bool, optional): Whether to remove or fill missing values. Defaults to True.
+            process_outliers (bool, optional): Whether to process outliers in the data. Defaults to True.
+            num_nan_value (Any, optional): The value to use for numerical missing data. Defaults to 0.
+            cat_nan_value (str, optional): The value to use for categorical missing data. Defaults to 'unknown'.
+
+        Raises:
+            ValueError: If none of the provided data DataFrames are non-empty.
+        """
         if all([shares is None, bonds is None, etfs is None]):
             raise ValueError("At least one DataFrame must be non-empty.")
 
@@ -235,6 +298,15 @@ class SecurityRating(object):
 
     @staticmethod
     def _country_risk_score(country: str) -> int:
+        """
+        Calculates a risk score based on the country of origin of the security.
+
+        Args:
+            country (str): The country code of the security.
+
+        Returns:
+            int: The risk score for the country.
+        """
         match country:
             case "RU":
                 return 10
@@ -251,6 +323,15 @@ class SecurityRating(object):
 
     @staticmethod
     def _rebalancing_freq_score(freq: str) -> int:
+        """
+        Calculates a score based on the rebalancing frequency of an ETF.
+
+        Args:
+            freq (str): The rebalancing frequency of the ETF.
+
+        Returns:
+            int: The score for the rebalancing frequency.
+        """
         match freq:
             case "daily":
                 return 10
@@ -265,6 +346,15 @@ class SecurityRating(object):
 
     @staticmethod
     def _focus_type_score(focus_type: str) -> int:
+        """
+        Calculates a score based on the focus type of ETF.
+
+        Args:
+            focus_type (str): The focus type of the ETF.
+
+        Returns:
+            int: The score for the focus type.
+        """
         match focus_type:
             case "equity":
                 return 10
@@ -280,6 +370,19 @@ class SecurityRating(object):
                 return 0
 
     def calculate_shares_rating(self, row: pd.Series) -> float:
+        """
+        Calculates the rating for a given share based on its characteristics such as liquidity, country risk,
+        issue size, and IPO days.
+
+        Args:
+            row (pd.Series): A row of shares data for which the rating is calculated.
+
+        Returns:
+            float: The calculated rating for the share.
+
+        Raises:
+            ValueError: If no shares were processed during initialization.
+        """
         if len(self._normalized_shares.keys()) == 0:
             raise ValueError("No shares were calculated.")
 
@@ -291,6 +394,19 @@ class SecurityRating(object):
         return 0.3 * liquidity + 0.2 * country_risk + 0.3 * issue_size + 0.2 * ipo_days
 
     def calculate_etfs_rating(self, row: pd.Series) -> float:
+        """
+        Calculates the rating for a given ETF based on its characteristics such as rebalancing frequency,
+        fixed commission, focus type, and number of shares.
+
+        Args:
+            row (pd.Series): A row of ETF data for which the rating is calculated.
+
+        Returns:
+            float: The calculated rating for the ETF.
+
+        Raises:
+            ValueError: If no ETFs were processed during initialization.
+        """
         if len(self._normalized_etfs.keys()) == 0:
             raise ValueError("No etfs were calculated.")
 
@@ -307,6 +423,19 @@ class SecurityRating(object):
         )
 
     def calculate_bonds_rating(self, row: pd.Series) -> float:
+        """
+        Calculates the rating for a given bond based on its characteristics such as coupon quantity per year,
+        maturity date, country risk, and issue size.
+
+        Args:
+            row (pd.Series): A row of bond data for which the rating is calculated.
+
+        Returns:
+            float: The calculated rating for the bond.
+
+        Raises:
+            ValueError: If no bonds were processed during initialization.
+        """
         if len(self._normalized_bonds.keys()) == 0:
             raise ValueError("No bonds were calculated.")
 
