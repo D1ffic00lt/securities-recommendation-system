@@ -453,7 +453,7 @@ class APIParser(object):
         to_date: datetime = now(),
         interval: CandleInterval = CandleInterval.CANDLE_INTERVAL_DAY,
         use_tqdm: bool = False,
-    ) -> dict[str, list[dict[str, float]]]:
+    ) -> dict[str, pd.DataFrame]:  # TODO: docs fix
         """
         Retrieves historical price data for a single FIGI or multiple FIGIs over a specified date range,
         optionally filtered up to a certain date.
@@ -493,7 +493,7 @@ class APIParser(object):
                 for candle in response.candles
             ]
 
-            price_history[figi] = candles
+            price_history[figi] = pd.DataFrame(candles)
 
         return price_history
 
