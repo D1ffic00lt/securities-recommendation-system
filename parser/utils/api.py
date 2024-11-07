@@ -5,7 +5,7 @@ import pandas as pd
 
 from datetime import datetime, timedelta
 from tqdm.auto import tqdm
-from typing import Any, Union
+from typing import Any, Generator, Union
 from tinkoff.invest.utils import now
 from tinkoff.invest import Client, GetLastPricesResponse, InstrumentStatus
 from tinkoff.invest.schemas import (
@@ -453,7 +453,8 @@ class APIParser(object):
         to_date: datetime = now(),
         interval: CandleInterval = CandleInterval.CANDLE_INTERVAL_DAY,
         use_tqdm: bool = False,
-    ) -> dict[str, pd.DataFrame]:  # TODO: docs fix
+        generator: bool = False,
+    ) -> Union[_price_history_type, Generator[pd.DataFrame, None, _price_history_type]]:
         """
         Retrieves historical price data for a single FIGI or multiple FIGIs over a specified date range,
         optionally filtered up to a certain date.
@@ -464,11 +465,12 @@ class APIParser(object):
             to_date (datetime): End date for the price history.
             interval (CandleInterval, optional): The interval for the candle data. Defaults to daily.
             use_tqdm (bool, optional): If True, displays a progress bar for price history evaluating.
-            False.
+            Defaults to False.
+            generator (bool, optional): If True, yields price history as a generator. Defaults to False.
 
         Returns:
-            dict[str, pd.DataFrame]: A dict where each key is a FIGI, and the value is a pd.DataFrame with
-            historical price data.
+            Union[dict[str, pd.DataFrame], Generator[pd.Series, None, dict[str, pd.DataFrame]]]: A dict where each key is a FIGI, and the value is a pd.DataFrame with
+            historical price data. Or the price history generator if needed.
         """
         if isinstance(figis, str):
             figis = [figis]
@@ -494,6 +496,9 @@ class APIParser(object):
             ]
 
             price_history[figi] = pd.DataFrame(candles)
+
+            if generator:
+                yield price_history[figi]
 
         return price_history
 
