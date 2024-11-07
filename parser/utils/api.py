@@ -4,9 +4,9 @@ import numpy as np
 import pandas as pd
 
 from datetime import datetime, timedelta
+from tqdm.auto import tqdm
 from typing import Any, Union
 from tinkoff.invest.utils import now
-from tqdm.auto import tqdm
 from tinkoff.invest import Client, GetLastPricesResponse, InstrumentStatus
 from tinkoff.invest.schemas import (
     BondsResponse,

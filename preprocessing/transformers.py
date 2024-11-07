@@ -1,7 +1,7 @@
-from typing import Any, Callable
-
 import numpy as np
 import pandas as pd
+
+from typing import Any, Callable
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
