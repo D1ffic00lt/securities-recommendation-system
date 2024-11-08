@@ -2,12 +2,14 @@ import os
 import warnings
 import numpy as np
 import pandas as pd
+import time
 
 from datetime import datetime, timedelta
+
 from tqdm.auto import tqdm
 from typing import Any, Generator, Union
 from tinkoff.invest.utils import now
-from tinkoff.invest import Client, GetLastPricesResponse, InstrumentStatus
+from tinkoff.invest import Client, GetLastPricesResponse, InstrumentStatus, RequestError
 from tinkoff.invest.schemas import (
     BondsResponse,
     CandleInterval,
@@ -454,7 +456,8 @@ class APIParser(object):
         interval: CandleInterval = CandleInterval.CANDLE_INTERVAL_DAY,
         use_tqdm: bool = False,
         generator: bool = False,
-    ) -> Union[_price_history_type, Generator[pd.DataFrame, None, _price_history_type]]:
+        retry_if_limit: bool = False,
+    ) -> Union[_price_history_type, Generator[pd.DataFrame, None, None]]:
         """
         Retrieves historical price data for a single FIGI or multiple FIGIs over a specified date range,
         optionally filtered up to a certain date.
@@ -472,13 +475,36 @@ class APIParser(object):
             Union[dict[str, pd.DataFrame], Generator[pd.Series, None, dict[str, pd.DataFrame]]]: A dict where each key is a FIGI, and the value is a pd.DataFrame with
             historical price data. Or the price history generator if needed.
         """
-        if isinstance(figis, str):
-            figis = [figis]
+        gen = self._parse_price_history(
+            figis=figis,
+            from_date=from_date,
+            to_date=to_date,
+            interval=interval,
+            use_tqdm=use_tqdm and generator,
+            retry_if_limit=retry_if_limit
+        )
+
+        if generator:
+            return gen
 
         price_history = {}
-        iterator = tqdm(figis) if use_tqdm else figis
 
-        for figi in iterator:
+        iterator = tqdm(zip(figis, gen)) if use_tqdm else zip(figis, gen)
+        for figi, price in iterator:
+            price_history[figi] = price
+
+        return price_history
+
+    def _parse_price_history(
+        self,
+        figis: Union[str, list[str]],
+        from_date: datetime = now() - timedelta(days=365),
+        to_date: datetime = now(),
+        interval: CandleInterval = CandleInterval.CANDLE_INTERVAL_DAY,
+        use_tqdm: bool = False,
+        retry_if_limit: bool = False,
+    ) -> Generator[pd.DataFrame, None, None]:
+        def validate_request():
             response = self._channel.market_data.get_candles(
                 figi=figi, from_=from_date, to=to_date, interval=interval
             )
@@ -494,13 +520,27 @@ class APIParser(object):
                 }
                 for candle in response.candles
             ]
+            return pd.DataFrame(candles)
 
-            price_history[figi] = pd.DataFrame(candles)
+        if isinstance(figis, str):
+            figis = [figis]
 
-            if generator:
-                yield price_history[figi]
+        iterator = tqdm(figis) if use_tqdm else figis
 
-        return price_history
+        for figi in iterator:
+            while True:
+                try:
+                    yield validate_request()
+                    break
+                except RequestError as error:
+                    if retry_if_limit:
+                        warnings.warn(
+                            "Request has been stopped via the API (limit). Retry in 10 seconds.",
+                            category=RuntimeWarning,
+                        )
+                        time.sleep(10)
+                        continue
+                    raise error
 
     def __repr__(self):
         return "APIParser({})".format(getattr(self, "_channel", None) is not None)
