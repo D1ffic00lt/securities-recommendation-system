@@ -1,20 +1,23 @@
 import pandas as pd
 import numpy as np
 
-from datetime import datetime
-from typing import Any, Iterable
+from datetime import datetime, timedelta
 from matplotlib.cbook import boxplot_stats
+from typing import Any, Iterable
+from tinkoff.invest import CandleInterval
+from tinkoff.invest.utils import now
 
 from preprocessing.transformers import make_empty_values_filler_pipeline
+from parser.utils.api import APIParser
 
 
 class SecurityPriceRating(object):
-    def __init__(self, price_data: pd.DataFrame):
+    def __init__(self, price_data: pd.Series) -> None:
         """
         Initialize with price data.
 
         Args:
-            price_data (pd.DataFrame): DataFrame containing datetime index and float values representing prices.
+            price_data (pd.Series): Series containing datetime index and float values representing prices.
         """
         self.price_data = price_data
         self.returns = self.price_data.pct_change().dropna()
@@ -37,7 +40,6 @@ class SecurityPriceRating(object):
         drawdown = (cumulative - peak) / peak
         return drawdown.min()
 
-    @property
     def sharpe_ratio(self, risk_free_rate: float = 0.02) -> float:
         """
         Sharpe ratio.
@@ -51,7 +53,6 @@ class SecurityPriceRating(object):
         excess_return = self.mean_return - risk_free_rate / len(self.returns)
         return excess_return / self.volatility
 
-    @property
     def sortino_ratio(self, risk_free_rate: float = 0.02) -> float:
         """
         Sortino ratio.
@@ -79,14 +80,16 @@ class SecurityPriceRating(object):
         """Provide a summary of all metrics."""
         return pd.Series(
             {
-                "Mean Return": self.mean_return,
-                "Volatility": self.volatility,
-                "Max Drawdown": self.max_drawdown,
-                "Sharpe Ratio": self.sharpe_ratio,
-                "Sortino Ratio": self.sortino_ratio,
-                "Trend Slope": self.trend_slope,
+                "mean_return": self.mean_return,
+                "volatility": self.volatility,
+                "max_drawdown": self.max_drawdown,
+                "sharpe_ratio": self.sharpe_ratio(),
+                "sortino_ratio": self.sortino_ratio(),
+                "trend_slope": self.trend_slope,
             }
         )
+
+    # def _get_rating(self):
 
 
 class NormalizedData(dict):
@@ -139,9 +142,11 @@ class NormalizedData(dict):
                     if not process_outliers:
                         dict.__setitem__(self, key, self.normalize(data[key]))
                     outliers_indexes = self._get_outliers_indexes(data[key])
+                    nans_indexes = data[key].isna()
                     column = data[key].copy()
                     column[outliers_indexes] = 10
-                    column[~outliers_indexes] = self.normalize(data[key])
+                    column[nans_indexes] = 0
+                    column[(~outliers_indexes) & (~nans_indexes)] = self.normalize(data[key])
                     dict.__setitem__(self, key, column)
 
     def __setitem__(self, key, value):
@@ -450,3 +455,43 @@ class SecurityRating(object):
             + 0.25 * country_risk
             + 0.2 * issue_size
         )
+
+    @staticmethod
+    def get_price_rating(
+        parser: APIParser,
+        figis: pd.Series,
+        use_tqdm: bool = False,
+        from_date: datetime = now() - timedelta(days=365),
+        to_date: datetime = now(),
+        interval: CandleInterval = CandleInterval.CANDLE_INTERVAL_DAY,
+        retry_if_limit: bool = False,
+    ) -> pd.DataFrame:
+        ratings = []
+        with parser:
+            for price in parser.parse_price_history(
+                figis=figis.values.tolist(),
+                use_tqdm=use_tqdm,
+                generator=True,
+                from_date=from_date,
+                to_date=to_date,
+                interval=interval,
+                retry_if_limit=retry_if_limit,
+            ):
+                try:
+                    price = price.set_index("time")
+                    rating = SecurityPriceRating(price.close)
+                    ratings.append(rating.summary())
+                except KeyError:
+                    ratings.append(
+                        pd.Series(
+                            {
+                                "mean_return": np.nan,
+                                "volatility": np.nan,
+                                "max_drawdown": np.nan,
+                                "sharpe_ratio": np.nan,
+                                "sortino_ratio": np.nan,
+                                "trend_slope": np.nan,
+                            }
+                        )
+                    )
+        return pd.DataFrame(ratings)
