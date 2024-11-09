@@ -140,14 +140,25 @@ class NormalizedData(dict):
                     )
                 case _:
                     if not process_outliers:
-                        dict.__setitem__(self, key, self.normalize(data[key]))
-                    outliers_indexes = self._get_outliers_indexes(data[key])
-                    nans_indexes = data[key].isna()
-                    column = data[key].copy()
-                    column[outliers_indexes] = 10
-                    column[nans_indexes] = 0
-                    column[(~outliers_indexes) & (~nans_indexes)] = self.normalize(data[key])
-                    dict.__setitem__(self, key, column)
+                        dict.__setitem__(self, key, self.normalize(data[key].fillna(0)))
+                    else:
+                        nans_indexes = data[key].isna()
+                        column = data[key].copy()
+
+                        stats = self._get_outliers(data[key].dropna())
+                        lower_bound = stats['whislo']
+                        upper_bound = stats['whishi']
+                        too_small = data[key] < lower_bound
+                        too_large = data[key] > upper_bound
+
+                        column[nans_indexes] = 0
+                        column[too_small] = 0
+                        column[too_large] = 10
+
+                        valid_indexes = (~nans_indexes) & (~too_small) & (~too_large)
+                        column[valid_indexes] = self.normalize(column[valid_indexes])
+
+                        dict.__setitem__(self, key, column)
 
     def __setitem__(self, key, value):
         """
@@ -189,7 +200,7 @@ class NormalizedData(dict):
         return 10 * (series - series.min()) / (series.max() - series.min())
 
     @staticmethod
-    def _get_outliers_indexes(data: pd.Series) -> pd.Series:
+    def _get_outliers(data: pd.Series) -> dict:
         """
         Identifies outliers in the data based on boxplot statistics.
 
@@ -199,8 +210,8 @@ class NormalizedData(dict):
         Returns:
             pd.Series: A boolean Series indicating which values are outliers.
         """
-        outliers = boxplot_stats(data).pop(0)["fliers"]
-        return data.isin(outliers)
+        outliers = boxplot_stats(data).pop(0)
+        return outliers
 
 
 class SecurityRating(object):
