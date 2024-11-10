@@ -42,8 +42,8 @@ class APIParser(object):
         if token is None:
             raise ValueError("Tinkoff token must be provided")
         self._token: str = token
-        self._client: Client | None = None
-        self._channel: Services | None = None
+        self._client: Union[Client, None] = None
+        self._channel: Union[Services, None] = None
         self.figis_prices = defaultdict(int)
         self.currencies_prices = {"rub": 1.0}
 
@@ -73,7 +73,8 @@ class APIParser(object):
         """
         Exits the APIParser context, closing the Tinkoff client connection and releasing resources.
         """
-        self._client.__exit__(exc_type, exc_val, exc_tb)
+        if self._client:
+            self._client.__exit__(exc_type, exc_val, exc_tb)
         self._channel = None
 
     @staticmethod
@@ -199,143 +200,34 @@ class APIParser(object):
         raise ValueError("Invalid data type. (%s)" % data.__class__.__name__)
 
     @write.register
-    def _(
-        self,
-        data: SharesResponse,
-        filename: str,
-        *,
-        use_tqdm: bool = False,
-        include_price: bool = False,
-        convert_to_rubles: bool = False,
-        skip_unknown: bool = False,
-        unknown_value: Any = np.nan,
-    ) -> None:
-        """
-        Writes shares data to a CSV file.
-
-        Args:
-            data (SharesResponse): The response data for shares.
-            filename (str): The name of the CSV file to write.
-            use_tqdm (bool, optional): Whether to display a progress bar.
-            include_price (bool, optional): Whether to include the price information in the CSV file.
-            convert_to_rubles (bool, optional): Whether to convert the price information to rubles.
-            skip_unknown (bool, optional): Whether to skip unknown currencies.
-            unknown_value (Any, optional): The value to use for unknown currencies.
-        """
+    def _(self, data: SharesResponse, filename: str, **kwargs) -> None:
+        """Writes shares data to a CSV file."""
         self._generate_csv(
-            columns=ResponseColumns.SHARES.value,
-            data=data,
-            filename=filename,
-            use_tqdm=use_tqdm,
-            include_price=include_price,
-            convert_to_rubles=convert_to_rubles,
-            skip_unknown=skip_unknown,
-            unknown_value=unknown_value,
+            columns=ResponseColumns.SHARES.value, data=data, filename=filename, **kwargs
         )
 
     @write.register
-    def _(
-        self,
-        data: BondsResponse,
-        filename: str,
-        *,
-        use_tqdm: bool = False,
-        include_price: bool = False,
-        convert_to_rubles: bool = False,
-        skip_unknown: bool = False,
-        unknown_value: Any = np.nan,
-    ) -> None:
-        """
-        Writes bonds data to a CSV file.
-
-        Args:
-            data (BondsResponse): The response data for bonds.
-            filename (str): The name of the CSV file to write.
-            use_tqdm (bool, optional): Whether to display a progress bar.
-            include_price (bool, optional): Whether to include the price information in the CSV file.
-            convert_to_rubles (bool, optional): Whether to convert the price information to rubles.
-            skip_unknown (bool, optional): Whether to skip unknown currencies.
-            unknown_value (Any, optional): The value to use for unknown currencies.
-        """
+    def _(self, data: BondsResponse, filename: str, **kwargs) -> None:
+        """Writes bonds data to a CSV file."""
         self._generate_csv(
-            columns=ResponseColumns.BONDS.value,
-            data=data,
-            filename=filename,
-            use_tqdm=use_tqdm,
-            include_price=include_price,
-            convert_to_rubles=convert_to_rubles,
-            skip_unknown=skip_unknown,
-            unknown_value=unknown_value,
+            columns=ResponseColumns.BONDS.value, data=data, filename=filename, **kwargs
         )
 
     @write.register
-    def _(
-        self,
-        data: EtfsResponse,
-        filename: str,
-        *,
-        use_tqdm: bool = False,
-        include_price: bool = False,
-        convert_to_rubles: bool = False,
-        skip_unknown: bool = False,
-        unknown_value: Any = np.nan,
-    ) -> None:
-        """
-        Writes ETF data to a CSV file.
-
-        Args:
-            data (EtfsResponse): The response data for ETFs.
-            filename (str): The name of the CSV file to write.
-            use_tqdm (bool, optional): Whether to display a progress bar.
-            include_price (bool, optional): Whether to include the price information in the CSV file.
-            convert_to_rubles (bool, optional): Whether to convert the price information to rubles.
-            skip_unknown (bool, optional): Whether to skip unknown currencies.
-            unknown_value (Any, optional): The value to use for unknown currencies.
-        """
+    def _(self, data: EtfsResponse, filename: str, **kwargs) -> None:
+        """Writes ETF data to a CSV file."""
         self._generate_csv(
-            columns=ResponseColumns.ETFS.value,
-            data=data,
-            filename=filename,
-            use_tqdm=use_tqdm,
-            include_price=include_price,
-            convert_to_rubles=convert_to_rubles,
-            skip_unknown=skip_unknown,
-            unknown_value=unknown_value,
+            columns=ResponseColumns.ETFS.value, data=data, filename=filename, **kwargs
         )
 
     @write.register
-    def _(
-        self,
-        data: CurrenciesResponse,
-        filename: str,
-        *,
-        use_tqdm: bool = False,
-        include_price: bool = False,
-        convert_to_rubles: bool = False,
-        skip_unknown: bool = False,
-        unknown_value: Any = np.nan,
-    ) -> None:
-        """
-        Writes currencies data to a CSV file.
-
-        Args:
-            data (CurrenciesResponse): The response data for currencies.
-            filename (str): The name of the CSV file to write.
-            use_tqdm (bool, optional): Whether to display a progress bar.
-            include_price (bool, optional): Whether to include the price information in the CSV file.
-            convert_to_rubles (bool, optional): Whether to convert the price information to rubles.
-            skip_unknown (bool, optional): Whether to skip unknown currencies.
-            unknown_value (Any, optional): The value to use for unknown currencies.
-        """
+    def _(self, data: CurrenciesResponse, filename: str, **kwargs) -> None:
+        """Writes currencies data to a CSV file."""
         self._generate_csv(
             columns=ResponseColumns.CURRENCIES.value,
             data=data,
             filename=filename,
-            use_tqdm=use_tqdm,
-            include_price=include_price,
-            convert_to_rubles=convert_to_rubles,
-            skip_unknown=skip_unknown,
-            unknown_value=unknown_value,
+            **kwargs,
         )
 
     def _generate_csv(
@@ -358,6 +250,7 @@ class APIParser(object):
             filename (str): The output file name.
             use_tqdm (bool, optional): Whether to use a progress bar during the data generation.
             include_price (bool, optional): Whether to include the price in the output dataframe.
+            convert_to_rubles (bool, optional): Whether to convert the price information to rubles.
             skip_unknown (bool, optional): Whether to skip unknown currencies.
             unknown_value (Any, optional): The value to use for unknown currencies.
         """
@@ -481,7 +374,7 @@ class APIParser(object):
             to_date=to_date,
             interval=interval,
             use_tqdm=use_tqdm and generator,
-            retry_if_limit=retry_if_limit
+            retry_if_limit=retry_if_limit,
         )
 
         if generator:
