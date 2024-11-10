@@ -1,3 +1,4 @@
+import warnings
 import pandas as pd
 import numpy as np
 
@@ -29,8 +30,14 @@ class SecurityPriceRating(object):
 
     @property
     def volatility(self) -> float:
-        """Volatility (standard deviation of returns)."""
-        return self.returns.std()
+        """
+        Volatility (standard deviation of returns).
+
+        Returns:
+            float: Standard deviation of returns. Returns NaN if returns are empty.
+        """
+        with warnings.catch_warnings(action="ignore"):
+            return self.returns.std(numeric_only=True)
 
     @property
     def max_drawdown(self) -> float:
@@ -48,7 +55,7 @@ class SecurityPriceRating(object):
             risk_free_rate (float): Risk-free rate, default is 2%.
 
         Returns:
-            float: Sharpe ratio.
+            float: Sharpe ratio. Returns NaN if volatility is zero.
         """
         excess_return = self.mean_return - risk_free_rate / len(self.returns)
         return excess_return / self.volatility
@@ -61,7 +68,7 @@ class SecurityPriceRating(object):
             risk_free_rate (float): Risk-free rate, default is 2%.
 
         Returns:
-            float: Sortino ratio.
+            float: Sortino ratio. Returns NaN if downside deviation is zero.
         """
         downside = self.returns[self.returns < 0]
         downside_std = downside.std()
@@ -70,7 +77,12 @@ class SecurityPriceRating(object):
 
     @property
     def trend_slope(self) -> np.ndarray[Any, Any]:
-        """Trend slope using linear regression on log prices."""
+        """
+        Trend slope using linear regression on log prices.
+
+        Returns:
+            np.ndarray[Any, Any]: Slope of the trend line fitted to the log prices.
+        """
         log_prices = np.log(self.price_data).values.flatten()
         x = np.arange(len(log_prices))
         slope = np.polyfit(x, log_prices, 1)[0]
@@ -82,14 +94,34 @@ class SecurityPriceRating(object):
             {
                 "mean_return": self.mean_return,
                 "volatility": self.volatility,
+                "stability": self._inverse(self.volatility),
                 "max_drawdown": self.max_drawdown,
+                "inverse_drawdown": self._inverse(self.max_drawdown),
                 "sharpe_ratio": self.sharpe_ratio(),
                 "sortino_ratio": self.sortino_ratio(),
                 "trend_slope": self.trend_slope,
             }
         )
 
-    # def _get_rating(self):
+    @staticmethod
+    def _inverse(x: float) -> float:
+        """
+        Computes the inverse of (1 + x) with special handling for edge cases.
+
+        Args:
+            x (float): The input value for which the inverse will be computed.
+
+        Returns:
+            float: The computed value of 1 / (1 + x). Handles special cases:
+                - If x is NaN, returns NaN.
+                - If x is approximately equal to -1 (within a tolerance of 1e-4), returns 1 / (1 + x + 1e-6) to avoid division by zero.
+        """
+        with warnings.catch_warnings(action="ignore"):
+            if np.isnan(x):
+                return np.nan
+            if np.isclose(x, -1, rtol=1e-4, atol=1e-4):
+                return 1 / (1 + x + 1e-6)
+            return 1 / (1 + x)
 
 
 class NormalizedData(dict):
@@ -146,8 +178,8 @@ class NormalizedData(dict):
                         column = data[key].copy()
 
                         stats = self._get_outliers(data[key].dropna())
-                        lower_bound = stats['whislo']
-                        upper_bound = stats['whishi']
+                        lower_bound = stats["whislo"]
+                        upper_bound = stats["whishi"]
                         too_small = data[key] < lower_bound
                         too_large = data[key] > upper_bound
 
@@ -468,7 +500,7 @@ class SecurityRating(object):
         )
 
     @staticmethod
-    def get_price_rating(
+    def calculate_price_rating(
         parser: APIParser,
         figis: pd.Series,
         use_tqdm: bool = False,
@@ -477,6 +509,29 @@ class SecurityRating(object):
         interval: CandleInterval = CandleInterval.CANDLE_INTERVAL_DAY,
         retry_if_limit: bool = False,
     ) -> pd.DataFrame:
+        """
+        Calculates a price rating for a set of securities based on historical price data.
+
+        Args:
+            parser (APIParser): An instance of APIParser to fetch historical price data.
+            figis (pd.Series): A pandas Series containing FIGIs (Financial Instrument Global Identifiers) of the securities.
+            use_tqdm (bool, optional): Whether to use tqdm to show progress. Defaults to False.
+            from_date (datetime, optional): The start date for fetching historical data. Defaults to one year ago.
+            to_date (datetime, optional): The end date for fetching historical data. Defaults to the current date.
+            interval (CandleInterval, optional): The time interval of the historical data (e.g., daily). Defaults to daily interval.
+            retry_if_limit (bool, optional): Whether to retry fetching data if rate limit is hit. Defaults to False.
+
+        Returns:
+            pd.DataFrame: A DataFrame containing calculated ratings for each security. Each row includes metrics such as:
+                          - "mean_return": Mean return of the security.
+                          - "stability": Stability of the security (inversely related to volatility).
+                          - "inverse_drawdown": Inverse of the maximum drawdown.
+                          - "sharpe_ratio": Sharpe ratio of the security.
+                          - "sortino_ratio": Sortino ratio of the security.
+                          - "trend_slope": The slope of the price trend.
+                          - "figi": FIGI of the security.
+                          - "rating": Average rating based on all the above metrics.
+        """
         ratings = []
         with parser:
             for price in parser.parse_price_history(
@@ -505,4 +560,22 @@ class SecurityRating(object):
                             }
                         )
                     )
-        return pd.DataFrame(ratings)
+        ratings_dataframe = pd.DataFrame(
+            NormalizedData(
+                pd.DataFrame(ratings),
+                keys=[
+                    "mean_return",
+                    "stability",
+                    "inverse_drawdown",
+                    "sharpe_ratio",
+                    "sortino_ratio",
+                    "trend_slope",
+                ],
+                process_outliers=True,
+            )
+        )
+        ratings_dataframe["figi"] = figis
+        ratings_dataframe["rating"] = ratings_dataframe[
+            list(set(ratings_dataframe.columns) - {"figi"})
+        ].apply(lambda x: x.mean(), axis=1)
+        return ratings_dataframe
