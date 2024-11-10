@@ -363,7 +363,7 @@ class APIParser(object):
             use_tqdm (bool, optional): If True, displays a progress bar for price history evaluating.
             Defaults to False.
             generator (bool, optional): If True, yields price history as a generator. Defaults to False.
-
+            retry_if_limit (bool, optional): If True, try to retry the request at the limit (RequestError). Defaults to False.
         Returns:
             Union[dict[str, pd.DataFrame], Generator[pd.Series, None, dict[str, pd.DataFrame]]]: A dict where each key is a FIGI, and the value is a pd.DataFrame with
             historical price data. Or the price history generator if needed.
@@ -397,6 +397,21 @@ class APIParser(object):
         use_tqdm: bool = False,
         retry_if_limit: bool = False,
     ) -> Generator[pd.DataFrame, None, None]:
+        """
+        Retrieves historical price data for a single FIGI or multiple FIGIs over a specified date range.
+
+        Args:
+            figis (Union[str, list[str]]): A single FIGI string or a list of FIGIs for the instruments.
+            from_date (datetime): Start date for the price history.
+            to_date (datetime): End date for the price history.
+            interval (CandleInterval, optional): The interval for the candle data. Defaults to daily.
+            use_tqdm (bool, optional): If True, displays a progress bar for price history evaluating.
+            retry_if_limit (bool, optional): Whether to retry fetching data if rate limit is hit. Defaults to False.
+
+        Yields:
+            pd.DataFrame: A DataFrame containing historical price data for each FIGI.
+        """
+
         def validate_request():
             response = self._channel.market_data.get_candles(
                 figi=figi, from_=from_date, to=to_date, interval=interval
