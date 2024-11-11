@@ -10,11 +10,11 @@ from preprocessing.rating import SecurityRating
 class SecurityVault(object):
     def __init__(self, token: str = os.environ.get("TINKOFF_TOKEN", None)):
         """
-       Initialize the SecurityVault class.
+        Initialize the SecurityVault class.
 
-       Args:
-           token (Optional[str]): Authentication token for accessing Tinkoff API. Defaults to value from environment variable "TINKOFF_TOKEN".
-       """
+        Args:
+            token (Optional[str]): Authentication token for accessing Tinkoff API. Defaults to value from environment variable "TINKOFF_TOKEN".
+        """
         self.bonds: Union[None, pd.DataFrame] = None
         self.shares: Union[None, pd.DataFrame] = None
         self.etfs: Union[None, pd.DataFrame] = None

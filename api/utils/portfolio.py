@@ -71,12 +71,12 @@ class RecommendationSystem(object):
 
     def recommend(self, portfolio: Portfolio, capacity: int):
         """
-       Recommend securities to add to the portfolio based on available capacity.
+        Recommend securities to add to the portfolio based on available capacity.
 
-       Args:
-           portfolio (Portfolio): The user's portfolio to which securities are to be added.
-           capacity (int): The total capacity to be used for adding new securities.
-       """
+        Args:
+            portfolio (Portfolio): The user's portfolio to which securities are to be added.
+            capacity (int): The total capacity to be used for adding new securities.
+        """
         free_capacity = capacity % 3
         etfs_capacity = capacity // 3
         bonds_capacity = capacity // 3
@@ -243,5 +243,3 @@ class RecommendationSystem(object):
             )
             solvers[str(sector)] = solver
         return solvers
-
-
