@@ -456,7 +456,7 @@ class APIParser(object):
         iterator = tqdm(figis, desc="Obtaining price history") if use_tqdm else figis
 
         for figi in iterator:
-            while True:
+            for _ in range(11):
                 try:
                     yield validate_request()
                     break
@@ -469,6 +469,10 @@ class APIParser(object):
                         time.sleep(10)
                         continue
                     raise error
+            else:
+                raise ConnectionError(
+                    "When connecting to Tinkoff API unexpected problems occurred. (attempts to reconnect: 10)"
+                )
 
     def __repr__(self):
         return "APIParser({})".format(getattr(self, "_channel", None) is not None)
