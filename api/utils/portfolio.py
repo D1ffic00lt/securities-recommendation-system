@@ -17,6 +17,17 @@ class Security(object):
         sector: str,
         lot: int,
     ):
+        """
+        Initialize the Security class.
+
+        Args:
+            figi (str): Financial Instrument Global Identifier.
+            price (int | float): Price of the security.
+            price_rating (float): Price rating of the security.
+            company_rating (float): Company rating of the security.
+            sector (str): Sector to which the security belongs.
+            lot (int): Number of units in a lot for the security.
+        """
         self.figi = figi
         self.price = price
         self.price_rating = price_rating
@@ -25,11 +36,24 @@ class Security(object):
         self.lot = lot
 
     def __repr__(self):
+        """
+        Return a string representation of the Security object.
+
+        Returns:
+            str: A string containing the FIGI and price of the security.
+        """
         return f"<{self.figi}, {self.price:.2f}>"
 
 
 class Portfolio(list):
     def __init__(self, user_id: int, securities: list[Security]):
+        """
+        Initialize the Portfolio class.
+
+        Args:
+            user_id (int): ID of the user who owns the portfolio.
+            securities (list[Security]): List of Security objects in the portfolio.
+        """
         super().__init__()
         self.user_id = user_id
         self.extend(securities)
@@ -37,9 +61,22 @@ class Portfolio(list):
 
 class RecommendationSystem(object):
     def __init__(self, storage: SecurityVault):
+        """
+        Initialize the RecommendationSystem class.
+
+        Args:
+            storage (SecurityVault): An instance of SecurityVault to access securities data.
+        """
         self.storage = storage
 
     def recommend(self, portfolio: Portfolio, capacity: int):
+        """
+       Recommend securities to add to the portfolio based on available capacity.
+
+       Args:
+           portfolio (Portfolio): The user's portfolio to which securities are to be added.
+           capacity (int): The total capacity to be used for adding new securities.
+       """
         free_capacity = capacity % 3
         etfs_capacity = capacity // 3
         bonds_capacity = capacity // 3
@@ -114,6 +151,17 @@ class RecommendationSystem(object):
     def _validate_solvers(
         data: pd.DataFrame, portfolio: Portfolio, solvers: dict[str, KnapsackSolver]
     ) -> int:
+        """
+        Validate and apply solutions from knapsack solvers to add securities to the portfolio.
+
+        Args:
+            data (pd.DataFrame): DataFrame containing securities data.
+            portfolio (Portfolio): The user's portfolio to which securities are to be added.
+            solvers (dict[str, KnapsackSolver]): A dictionary of knapsack solvers for each sector.
+
+        Returns:
+            int: The total amount of money spent for the selected securities.
+        """
         valid_columns = [
             "figi",
             "sector",
@@ -154,6 +202,16 @@ class RecommendationSystem(object):
     def _build_recommendation_systems(
         data: pd.DataFrame, sectors_weights: pd.Series
     ) -> dict[str, KnapsackSolver]:
+        """
+        Build knapsack solvers for each sector based on sector weights.
+
+        Args:
+            data (pd.DataFrame): DataFrame containing securities data.
+            sectors_weights (pd.Series): Series containing sector weights for allocating securities.
+
+        Returns:
+            dict[str, KnapsackSolver]: A dictionary of knapsack solvers for each sector.
+        """
         valid_columns = [
             "figi",
             "sector",

@@ -9,6 +9,12 @@ from preprocessing.rating import SecurityRating
 
 class SecurityVault(object):
     def __init__(self, token: str = os.environ.get("TINKOFF_TOKEN", None)):
+        """
+       Initialize the SecurityVault class.
+
+       Args:
+           token (Optional[str]): Authentication token for accessing Tinkoff API. Defaults to value from environment variable "TINKOFF_TOKEN".
+       """
         self.bonds: Union[None, pd.DataFrame] = None
         self.shares: Union[None, pd.DataFrame] = None
         self.etfs: Union[None, pd.DataFrame] = None
@@ -28,20 +34,16 @@ class SecurityVault(object):
             if os.path.exists(f"./.cache/{i}.csv"):
                 self._load(i)
 
-    def _load(self, name):
-        match name:
-            case "shares":
-                self.shares = pd.read_csv(f"./.cache/{name}.csv")
-            case "etfs":
-                self.etfs = pd.read_csv(f"./.cache/{name}.csv")
-            case "bonds":
-                self.bonds = pd.read_csv(f"./.cache/{name}.csv")
-            case "currencies":
-                self.currencies = pd.read_csv(f"./.cache/{name}.csv")
-            case _:
-                raise ValueError(f"Invalid name: {name}")
-
     def build_evaluator(self, **kwargs) -> SecurityRating:
+        """
+        Build and initialize the SecurityRating evaluator.
+
+        Args:
+            **kwargs: Additional keyword arguments to configure the SecurityRating instance.
+
+        Returns:
+            SecurityRating: The initialized SecurityRating evaluator.
+        """
         self._evaluator = SecurityRating(
             shares=self.shares,
             bonds=self.bonds,
@@ -51,6 +53,9 @@ class SecurityVault(object):
         return self._evaluator
 
     def build_bonds(self):
+        """
+        Build bonds DataFrame by parsing and saving bonds data to cache.
+        """
         bonds = self._parser.parse_bonds()
         self.bonds = self._parser.write(
             bonds,
@@ -67,6 +72,9 @@ class SecurityVault(object):
         self.bonds.to_csv("./.cache/bonds.csv", index=False)
 
     def build_shares(self):
+        """
+        Build shares DataFrame by parsing and saving shares data to cache.
+        """
         shares = self._parser.parse_shares()
         self.shares = self._parser.write(
             shares,
@@ -83,6 +91,9 @@ class SecurityVault(object):
         self.shares.to_csv("./.cache/shares.csv", index=False)
 
     def build_etfs(self):
+        """
+        Build ETFs DataFrame by parsing and saving ETFs data to cache.
+        """
         etfs = self._parser.parse_etfs()
         self.etfs = self._parser.write(
             etfs,
@@ -99,6 +110,9 @@ class SecurityVault(object):
         self.etfs.to_csv("./.cache/etfs.csv", index=False)
 
     def build_currencies(self):
+        """
+        Build currencies DataFrame by parsing and saving currencies data to cache.
+        """
         currencies = self._parser.parse_currencies()
         self._parser.write(
             currencies,
@@ -111,6 +125,13 @@ class SecurityVault(object):
         )
 
     def price_ranking(self, *, use_tqdm: bool = True, retry_if_limit: bool = True):
+        """
+        Calculate and update price ranking for bonds, shares, and ETFs.
+
+        Args:
+            use_tqdm (bool): Whether to use tqdm progress bar. Defaults to True.
+            retry_if_limit (bool): Whether to retry if the API rate limit is reached. Defaults to True.
+        """
         rating_columns = {"rating_x": "company_rating", "rating_y": "price_rating"}
         bonds_price_ratings = self._evaluator.calculate_price_rating(
             self._parser,
@@ -147,6 +168,13 @@ class SecurityVault(object):
         self.etfs.to_csv("./.cache/etfs.csv", index=False)
 
     def build(self, use_tqdm: bool = True, retry_if_limit: bool = True):
+        """
+        Build all securities (currencies, bonds, shares, and ETFs) and calculate price ranking.
+
+        Args:
+            use_tqdm (bool): Whether to use tqdm progress bar. Defaults to True.
+            retry_if_limit (bool): Whether to retry if the API rate limit is reached. Defaults to True.
+        """
         with self._parser:
             self.build_currencies()
             self.build_bonds()
@@ -156,6 +184,12 @@ class SecurityVault(object):
 
     @staticmethod
     def _check_cache_exists():
+        """
+        Check if cache files for securities exist.
+
+        Returns:
+            Dict[str, bool]: A dictionary indicating the existence of cache files for each security type.
+        """
         return {
             "folder": os.path.exists("./.cache"),
             "bonds": os.path.exists("./.cache/bonds.csv"),
@@ -163,3 +197,22 @@ class SecurityVault(object):
             "currencies": os.path.exists("./.cache/currencies.csv"),
             "shares": os.path.exists("./.cache/shares.csv"),
         }
+
+    def _load(self, name):
+        """
+        Load cached data for a given security type.
+
+        Args:
+            name (str): The name of the security type to load (e.g., "shares", "etfs", "bonds", "currencies").
+        """
+        match name:
+            case "shares":
+                self.shares = pd.read_csv(f"./.cache/{name}.csv")
+            case "etfs":
+                self.etfs = pd.read_csv(f"./.cache/{name}.csv")
+            case "bonds":
+                self.bonds = pd.read_csv(f"./.cache/{name}.csv")
+            case "currencies":
+                self.currencies = pd.read_csv(f"./.cache/{name}.csv")
+            case _:
+                raise ValueError(f"Invalid name: {name}")
