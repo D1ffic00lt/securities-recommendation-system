@@ -5,7 +5,6 @@ import pandas as pd
 import time
 
 from datetime import datetime, timedelta
-
 from tqdm.auto import tqdm
 from typing import Any, Generator, Union
 from tinkoff.invest.utils import now
@@ -176,6 +175,7 @@ class APIParser(object):
         self,
         data: Any,
         filename: str,
+        to_csv: bool = False,
         *,
         use_tqdm: bool = False,
         include_price: bool = False,
@@ -189,6 +189,7 @@ class APIParser(object):
         Args:
             data: The Tinkoff API response data.
             filename (str): The name of the CSV file to write.
+            to_csv (bool, optional): Whether to write the data to a CSV file. Defaults to False.
             use_tqdm (bool, optional): Whether to display a progress bar.
             include_price (bool, optional): Whether to include the price information in the CSV file.
             convert_to_rubles (bool, optional): Whether to convert the price information to rubles.
@@ -200,30 +201,32 @@ class APIParser(object):
         raise ValueError("Invalid data type. (%s)" % data.__class__.__name__)
 
     @write.register
-    def _(self, data: SharesResponse, filename: str, **kwargs) -> None:
+    def _(self, data: SharesResponse, filename: str, **kwargs) -> pd.DataFrame | None:
         """Writes shares data to a CSV file."""
-        self._generate_csv(
+        return self._generate_csv(
             columns=ResponseColumns.SHARES.value, data=data, filename=filename, **kwargs
         )
 
     @write.register
-    def _(self, data: BondsResponse, filename: str, **kwargs) -> None:
+    def _(self, data: BondsResponse, filename: str, **kwargs) -> pd.DataFrame | None:
         """Writes bonds data to a CSV file."""
-        self._generate_csv(
+        return self._generate_csv(
             columns=ResponseColumns.BONDS.value, data=data, filename=filename, **kwargs
         )
 
     @write.register
-    def _(self, data: EtfsResponse, filename: str, **kwargs) -> None:
+    def _(self, data: EtfsResponse, filename: str, **kwargs) -> pd.DataFrame | None:
         """Writes ETF data to a CSV file."""
-        self._generate_csv(
+        return self._generate_csv(
             columns=ResponseColumns.ETFS.value, data=data, filename=filename, **kwargs
         )
 
     @write.register
-    def _(self, data: CurrenciesResponse, filename: str, **kwargs) -> None:
+    def _(
+        self, data: CurrenciesResponse, filename: str, **kwargs
+    ) -> pd.DataFrame | None:
         """Writes currencies data to a CSV file."""
-        self._generate_csv(
+        return self._generate_csv(
             columns=ResponseColumns.CURRENCIES.value,
             data=data,
             filename=filename,
@@ -235,12 +238,13 @@ class APIParser(object):
         columns: list[str],
         data: _response_types,
         filename: str,
+        to_csv: bool = False,
         use_tqdm: bool = False,
         include_price: bool = False,
         convert_to_rubles: bool = False,
         skip_unknown: bool = False,
         unknown_value: Any = np.nan,
-    ) -> None:
+    ) -> pd.DataFrame | None:
         """
         Generates a CSV file from the Tinkoff API data response.
 
@@ -248,13 +252,18 @@ class APIParser(object):
             columns (list[str]): List of columns to include in the output.
             data (_response_types): The Tinkoff API data to write.
             filename (str): The output file name.
+            to_csv (bool, optional): Whether to write the data to a CSV file. Defaults to False.
             use_tqdm (bool, optional): Whether to use a progress bar during the data generation.
             include_price (bool, optional): Whether to include the price in the output dataframe.
             convert_to_rubles (bool, optional): Whether to convert the price information to rubles.
             skip_unknown (bool, optional): Whether to skip unknown currencies.
             unknown_value (Any, optional): The value to use for unknown currencies.
         """
-        iterator = tqdm(data.instruments) if use_tqdm else data.instruments
+        iterator = (
+            tqdm(data.instruments, desc="Creation of a csv")
+            if use_tqdm
+            else data.instruments
+        )
         data = [
             {attr: self._validate_value(getattr(row, attr)) for attr in columns}
             for row in iterator
@@ -283,7 +292,10 @@ class APIParser(object):
                 dataframe["rub_price"] = dataframe.price * dataframe.currency.map(
                     lambda x: currencies_prices[x]
                 )
-        dataframe.to_csv(filename, index=False)
+        if to_csv:
+            dataframe.to_csv(filename, index=False)
+            return
+        return dataframe
 
     @connection
     def get_currencies_exchange_rates(
@@ -300,7 +312,11 @@ class APIParser(object):
                               The RUB currency is set to an exchange rate of 1.
         """
         currencies = self.parse_currencies()
-        iterator = tqdm(currencies.instruments) if use_tqdm else currencies.instruments
+        iterator = (
+            tqdm(currencies.instruments, desc="Obtaining exchange rates")
+            if use_tqdm
+            else currencies.instruments
+        )
         data = [
             {
                 attr: self._validate_value(getattr(row, attr))
@@ -382,7 +398,11 @@ class APIParser(object):
 
         price_history = {}
 
-        iterator = tqdm(zip(figis, gen)) if use_tqdm else zip(figis, gen)
+        iterator = (
+            tqdm(zip(figis, gen), desc="Obtaining price history")
+            if use_tqdm
+            else zip(figis, gen)
+        )
         for figi, price in iterator:
             price_history[figi] = price
 
@@ -433,7 +453,7 @@ class APIParser(object):
         if isinstance(figis, str):
             figis = [figis]
 
-        iterator = tqdm(figis) if use_tqdm else figis
+        iterator = tqdm(figis, desc="Obtaining price history") if use_tqdm else figis
 
         for figi in iterator:
             while True:
