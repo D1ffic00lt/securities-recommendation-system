@@ -28,7 +28,7 @@ __all__ = ("APIParser",)
 
 
 class APIParser(object):
-    def __init__(self, token: str = os.environ.get("TINKOFF_TOKEN", None)):
+    def __init__(self, token: str = None):
         """
         Initializes the APIParser with a Tinkoff API token.
 
@@ -38,8 +38,9 @@ class APIParser(object):
         Raises:
             ValueError: If no token is provided.
         """
+        token = token or os.environ.get("TINKOFF_TOKEN", None)
         if token is None:
-            raise ValueError("Tinkoff token must be provided")
+            raise ValueError(f"Tinkoff token must be provided {os.environ.get('TINKOFF_TOKEN', None)}")
         self._token: str = token
         self._client: Union[Client, None] = None
         self._channel: Union[Services, None] = None
