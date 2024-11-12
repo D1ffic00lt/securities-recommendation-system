@@ -4,7 +4,7 @@ import pandas as pd
 from ortools.algorithms.python import knapsack_solver
 from ortools.algorithms.python.knapsack_solver import KnapsackSolver
 
-from storage import SecurityVault
+from .storage import SecurityVault
 
 
 class Security(object):
@@ -35,6 +35,15 @@ class Security(object):
         self.sector = sector
         self.lot = lot
 
+    @property
+    def json(self):
+        return {
+            "figi": str(self.figi),
+            "price": float(self.price),
+            "sector": str(self.sector),
+            "lot": int(self.lot),
+        }
+
     def __repr__(self):
         """
         Return a string representation of the Security object.
@@ -46,7 +55,7 @@ class Security(object):
 
 
 class Portfolio(list):
-    def __init__(self, user_id: int, securities: list[Security]):
+    def __init__(self, user_id: int, securities: list[Security] = None):
         """
         Initialize the Portfolio class.
 
@@ -56,8 +65,12 @@ class Portfolio(list):
         """
         super().__init__()
         self.user_id = user_id
-        self.extend(securities)
+        if securities is not None:
+            self.extend(securities)
 
+    @property
+    def json(self):
+        return [security.json for security in self]
 
 class RecommendationSystem(object):
     def __init__(self, storage: SecurityVault):
@@ -223,6 +236,7 @@ class RecommendationSystem(object):
         solvers = {}
 
         original_data = data.copy()
+        # breakpoint()
         original_data = original_data[valid_columns].dropna()
         original_data.rub_price = original_data.rub_price.apply(np.ceil).astype(int)
         original_data["ratings"] = (
