@@ -72,6 +72,7 @@ class Portfolio(list):
     def json(self):
         return [security.json for security in self]
 
+
 class RecommendationSystem(object):
     def __init__(self, storage: SecurityVault):
         """

@@ -18,10 +18,9 @@ recommendation_system = RecommendationSystem(storage)
 async def root():
     return {"message": "Hello World"}
 
+
 @app.get("/get-portfolio/{user_id}/{capacity}")
-async def read_item(
-    user_id: int, capacity: int
-):
+async def read_item(user_id: int, capacity: int):
     portfolio = Portfolio(user_id=user_id)
     recommendation_system.recommend(portfolio, capacity)
     return portfolio.json

@@ -40,7 +40,7 @@ class APIParser(object):
         """
         token = token or os.environ.get("TINKOFF_TOKEN", None)
         if token is None:
-            raise ValueError(f"Tinkoff token must be provided {os.environ.get('TINKOFF_TOKEN', None)}")
+            raise ValueError(f"Tinkoff token must be provided")
         self._token: str = token
         self._client: Union[Client, None] = None
         self._channel: Union[Services, None] = None
