@@ -26,7 +26,7 @@ class SecurityVault(object):
 
         self._parser.get_currencies_exchange_rates(use_tqdm=True)
 
-        checks = self._check_cache_exists()
+        checks = self.cache_check()
         if not checks["folder"]:
             os.mkdir("./.cache")
 
@@ -183,7 +183,7 @@ class SecurityVault(object):
             self.price_ranking(use_tqdm=use_tqdm, retry_if_limit=retry_if_limit)
 
     @staticmethod
-    def _check_cache_exists():
+    def cache_check():
         """
         Check if cache files for securities exist.
 
