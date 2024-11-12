@@ -11,6 +11,7 @@ class Security(object):
     def __init__(
         self,
         figi: str,
+        name: str,
         price: int | float,
         price_rating: float,
         company_rating: float,
@@ -22,6 +23,7 @@ class Security(object):
 
         Args:
             figi (str): Financial Instrument Global Identifier.
+            name (str): Name of the Security.
             price (int | float): Price of the security.
             price_rating (float): Price rating of the security.
             company_rating (float): Company rating of the security.
@@ -34,6 +36,7 @@ class Security(object):
         self.company_rating = company_rating
         self.sector = sector
         self.lot = lot
+        self.name = name
 
     @property
     def json(self):
@@ -42,6 +45,9 @@ class Security(object):
             "price": float(self.price),
             "sector": str(self.sector),
             "lot": int(self.lot),
+            "price_rating": float(self.price_rating),
+            "company_rating": float(self.company_rating),
+            "name": str(self.name),
         }
 
     def __repr__(self):
@@ -149,7 +155,6 @@ class RecommendationSystem(object):
         number_of_etfs = free_capacity // int(infinity_portfolio.rub_price)
         infinity_portfolio.lot = infinity_portfolio.lot * number_of_etfs
         infinity_portfolio.rub_price = infinity_portfolio.rub_price * number_of_etfs
-
         portfolio.append(
             Security(
                 figi=infinity_portfolio.figi,
@@ -158,6 +163,7 @@ class RecommendationSystem(object):
                 company_rating=infinity_portfolio.company_rating,
                 sector=infinity_portfolio.sector,
                 lot=infinity_portfolio.lot,
+                name=infinity_portfolio["name"],
             )
         )
 
@@ -183,6 +189,7 @@ class RecommendationSystem(object):
             "company_rating",
             "lot",
             "rub_price",
+            "name",
         ]
         original_data = data.copy()
         original_data = original_data[valid_columns].dropna()
@@ -208,6 +215,7 @@ class RecommendationSystem(object):
                             company_rating=value.company_rating,
                             sector=value.sector,
                             lot=value.lot,
+                            name=value["name"]
                         )
                     )
         return money_spent
@@ -233,11 +241,11 @@ class RecommendationSystem(object):
             "company_rating",
             "lot",
             "rub_price",
+            "name"
         ]
         solvers = {}
 
         original_data = data.copy()
-        # breakpoint()
         original_data = original_data[valid_columns].dropna()
         original_data.rub_price = original_data.rub_price.apply(np.ceil).astype(int)
         original_data["ratings"] = (
