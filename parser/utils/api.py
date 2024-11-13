@@ -45,6 +45,7 @@ class APIParser(object):
         self._client: Union[Client, None] = None
         self._channel: Union[Services, None] = None
         self.figis_prices = defaultdict(int)
+        self.figis_last_candle_prices = defaultdict(float)
         self.currencies_prices = {"rub": 1.0}
 
     def __enter__(self) -> "APIParser":
@@ -261,7 +262,7 @@ class APIParser(object):
             unknown_value (Any, optional): The value to use for unknown currencies.
         """
         iterator = (
-            tqdm(data.instruments, desc="Creation of a csv")
+            tqdm(data.instruments, desc="Creation of a csv\t\t")
             if use_tqdm
             else data.instruments
         )
@@ -400,7 +401,7 @@ class APIParser(object):
         price_history = {}
 
         iterator = (
-            tqdm(zip(figis, gen), desc="Obtaining price history")
+            tqdm(zip(figis, gen), desc="Obtaining price history\t")
             if use_tqdm
             else zip(figis, gen)
         )
@@ -449,12 +450,15 @@ class APIParser(object):
                 }
                 for candle in response.candles
             ]
+
+            if len(candles) != 0:
+                self.figis_last_candle_prices[figi] = float(candles[-1]["close"])
             return pd.DataFrame(candles)
 
         if isinstance(figis, str):
             figis = [figis]
 
-        iterator = tqdm(figis, desc="Obtaining price history") if use_tqdm else figis
+        iterator = tqdm(figis, desc="Obtaining price history\t") if use_tqdm else figis
 
         for figi in iterator:
             for _ in range(11):
