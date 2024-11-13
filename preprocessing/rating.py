@@ -44,6 +44,9 @@ class SecurityPriceRating(object):
         """Maximum drawdown."""
         cumulative = (1 + self.returns).cumprod()
         peak = cumulative.cummax()
+        if peak.shape[0] == 0:
+            return 0
+
         drawdown = (cumulative - peak) / peak
         return drawdown.min()
 
@@ -57,6 +60,8 @@ class SecurityPriceRating(object):
         Returns:
             float: Sharpe ratio. Returns NaN if volatility is zero.
         """
+        if len(self.returns) == 0 or self.volatility == 0:
+            return 0
         excess_return = self.mean_return - risk_free_rate / len(self.returns)
         return excess_return / self.volatility
 
@@ -70,23 +75,33 @@ class SecurityPriceRating(object):
         Returns:
             float: Sortino ratio. Returns NaN if downside deviation is zero.
         """
+        if len(self.returns) == 0:
+            return 0
+
         downside = self.returns[self.returns < 0]
         downside_std = downside.std()
         excess_return = self.mean_return - risk_free_rate / len(self.returns)
-        return excess_return / downside_std if downside_std != 0 else np.nan
+        return excess_return / downside_std if downside_std != 0 else 0
 
     @property
-    def trend_slope(self) -> np.ndarray[Any, Any]:
+    def trend_slope(self) -> float:
         """
         Trend slope using linear regression on log prices.
 
         Returns:
             np.ndarray[Any, Any]: Slope of the trend line fitted to the log prices.
         """
+        if self.price_data.shape[0] == 0:
+            return 0
+
         log_prices = np.log(self.price_data).values.flatten()
         x = np.arange(len(log_prices))
+
+        if x.shape[0] == 1:
+            return 0
+
         slope = np.polyfit(x, log_prices, 1)[0]
-        return slope
+        return float(slope)
 
     def summary(self) -> pd.Series:
         """Provide a summary of all metrics."""
@@ -118,7 +133,7 @@ class SecurityPriceRating(object):
         """
         with warnings.catch_warnings(action="ignore"):
             if np.isnan(x):
-                return np.nan
+                return 0
             if np.isclose(x, -1, rtol=1e-4, atol=1e-4):
                 return 1 / (1 + x + 1e-6)
             return 1 / (1 + x)
@@ -242,7 +257,9 @@ class NormalizedData(dict):
         Returns:
             pd.Series: A boolean Series indicating which values are outliers.
         """
-        outliers = boxplot_stats(data).pop(0)
+        outliers = boxplot_stats(data).pop(
+            0
+        )  # funny attribute reference from ~MATPLOTLIB~
         return outliers
 
 
