@@ -18,7 +18,6 @@ if st.button("Сгенерировать портфель"):
 
         if portfolio:
             df = pd.DataFrame(portfolio)
-            df["final_rating"] = df.price_rating + df.company_rating
 
             st.subheader("Сгенерированный Портфель")
             st.write(df.sort_values(by="final_rating", ascending=False))
@@ -34,6 +33,16 @@ if st.button("Сгенерировать портфель"):
                 names="sector",
                 values="price",
                 title="Распределение по секторам",
+            )
+            st.plotly_chart(fig)
+
+            st.subheader("Распределение по типам")
+            types_distribution = df.groupby("type")["price"].sum().reset_index()
+            fig = px.pie(
+                types_distribution,
+                names="type",
+                values="price",
+                title="Распределение по типам",
             )
             st.plotly_chart(fig)
 
