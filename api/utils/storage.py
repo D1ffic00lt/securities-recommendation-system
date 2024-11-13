@@ -1,14 +1,21 @@
 import os
 import pandas as pd
 
+from datetime import datetime, timedelta
 from typing import Union
+from tinkoff.invest.utils import now
 
 from parser.utils.api import APIParser
 from preprocessing.rating import SecurityRating
 
 
 class SecurityVault(object):
-    def __init__(self, token: str = os.environ.get("TINKOFF_TOKEN", None)):
+    def __init__(
+        self,
+        token: str = os.environ.get("TINKOFF_TOKEN", None),
+        *,
+        cache_path: str = "./.cache",
+    ):
         """
         Initialize the SecurityVault class.
 
@@ -20,6 +27,7 @@ class SecurityVault(object):
         self.etfs: Union[None, pd.DataFrame] = None
         self.currencies: Union[None, pd.DataFrame] = None
 
+        self._cache_path = cache_path
         self._token = token
         self._parser = APIParser(token)
         self._evaluator = None
@@ -28,11 +36,12 @@ class SecurityVault(object):
 
         checks = self.cache_check()
         if not checks["folder"]:
-            os.mkdir("./.cache")
+            os.mkdir(self._cache_path)
 
         for i in ["shares", "etfs", "bonds", "currencies"]:
-            if os.path.exists(f"./.cache/{i}.csv"):
+            if os.path.exists(os.path.join(self._cache_path, f"{i}.csv")):
                 self._load(i)
+
 
     def build_evaluator(self, **kwargs) -> SecurityRating:
         """
@@ -59,7 +68,7 @@ class SecurityVault(object):
         bonds = self._parser.parse_bonds()
         self.bonds = self._parser.write(
             bonds,
-            "./.cache/bonds.csv",
+            os.path.join(self._cache_path, "bonds.csv"),
             include_price=True,
             use_tqdm=True,
             convert_to_rubles=True,
@@ -69,7 +78,7 @@ class SecurityVault(object):
         self.bonds["rating"] = self.bonds.apply(
             self._evaluator.calculate_bonds_rating, axis=1
         )
-        self.bonds.to_csv("./.cache/bonds.csv", index=False)
+        self.bonds.to_csv(os.path.join(self._cache_path, "bonds.csv"), index=False)
 
     def build_shares(self):
         """
@@ -78,7 +87,7 @@ class SecurityVault(object):
         shares = self._parser.parse_shares()
         self.shares = self._parser.write(
             shares,
-            "./.cache/shares.csv",
+            os.path.join(self._cache_path, "shares.csv"),
             include_price=True,
             use_tqdm=True,
             convert_to_rubles=True,
@@ -88,7 +97,7 @@ class SecurityVault(object):
         self.shares["rating"] = self.shares.apply(
             self._evaluator.calculate_shares_rating, axis=1
         )
-        self.shares.to_csv("./.cache/shares.csv", index=False)
+        self.shares.to_csv(os.path.join(self._cache_path, "shares.csv"), index=False)
 
     def build_etfs(self):
         """
@@ -97,7 +106,7 @@ class SecurityVault(object):
         etfs = self._parser.parse_etfs()
         self.etfs = self._parser.write(
             etfs,
-            "./.cache/etfs.csv",
+            os.path.join(self._cache_path, "etfs.csv"),
             include_price=True,
             use_tqdm=True,
             convert_to_rubles=True,
@@ -107,7 +116,7 @@ class SecurityVault(object):
         self.etfs["rating"] = self.etfs.apply(
             self._evaluator.calculate_etfs_rating, axis=1
         )
-        self.etfs.to_csv("./.cache/etfs.csv", index=False)
+        self.etfs.to_csv(os.path.join(self._cache_path, "etfs.csv"), index=False)
 
     def build_currencies(self):
         """
@@ -116,7 +125,7 @@ class SecurityVault(object):
         currencies = self._parser.parse_currencies()
         self._parser.write(
             currencies,
-            "./.cache/currencies.csv",
+            os.path.join(self._cache_path, "currencies.csv"),
             include_price=True,
             use_tqdm=True,
             convert_to_rubles=True,
@@ -124,66 +133,111 @@ class SecurityVault(object):
             to_csv=True,
         )
 
-    def price_ranking(self, *, use_tqdm: bool = True, retry_if_limit: bool = True):
+    def price_ranking(
+        self,
+        *,
+        use_tqdm: bool = True,
+        retry_if_limit: bool = True,
+        from_date: datetime = now() - timedelta(days=365),
+        to_date: datetime = now(),
+    ):
         """
         Calculate and update price ranking for bonds, shares, and ETFs.
 
         Args:
             use_tqdm (bool): Whether to use tqdm progress bar. Defaults to True.
             retry_if_limit (bool): Whether to retry if the API rate limit is reached. Defaults to True.
+            from_date (datetime): From date to calculate price ranking.
+            to_date (datetime): To date to calculate price ranking.
         """
         rating_columns = {"rating_x": "company_rating", "rating_y": "price_rating"}
-        bonds_price_ratings = self._evaluator.calculate_price_rating(
-            self._parser,
-            self.bonds.figi,
-            use_tqdm=use_tqdm,
-            retry_if_limit=retry_if_limit,
-        )
-        self.bonds = self.bonds.merge(bonds_price_ratings, on="figi", how="inner")
-        self.bonds = self.bonds.rename(rating_columns, axis=1)
-        self.bonds = self.bonds.loc[self.bonds.rub_price > 0]
-
-        shares_price_ratings = self._evaluator.calculate_price_rating(
-            self._parser,
-            self.shares.figi,
-            use_tqdm=use_tqdm,
-            retry_if_limit=retry_if_limit,
-        )
-        self.shares = self.shares.merge(shares_price_ratings, on="figi", how="inner")
-        self.shares = self.shares.rename(rating_columns, axis=1)
-        self.shares = self.shares[self.shares.rub_price > 0]
 
         etfs_price_ratings = self._evaluator.calculate_price_rating(
             self._parser,
             self.etfs.figi,
             use_tqdm=use_tqdm,
             retry_if_limit=retry_if_limit,
+            from_date=from_date,
+            to_date=to_date,
         )
         self.etfs = self.etfs.merge(etfs_price_ratings, on="figi", how="inner")
         self.etfs = self.etfs.rename(rating_columns, axis=1)
         self.etfs = self.etfs.loc[self.etfs.rub_price > 0]
+        self.etfs["ratings"] = (
+            self.etfs.price_rating + self.etfs.company_rating
+        ).apply(lambda x: int(x * 100))
+        self.etfs["candle_price"] = self.etfs.figi.apply(
+            lambda x: self._parser.figis_last_candle_prices[x]
+        )
+        self.etfs.to_csv(os.path.join(self._cache_path, "etfs.csv"), index=False)
 
-        self.bonds.to_csv("./.cache/bonds.csv", index=False)
-        self.shares.to_csv("./.cache/shares.csv", index=False)
-        self.etfs.to_csv("./.cache/etfs.csv", index=False)
+        bonds_price_ratings = self._evaluator.calculate_price_rating(
+            self._parser,
+            self.bonds.figi,
+            use_tqdm=use_tqdm,
+            retry_if_limit=retry_if_limit,
+            from_date=from_date,
+            to_date=to_date,
+        )
+        self.bonds = self.bonds.merge(bonds_price_ratings, on="figi", how="inner")
+        self.bonds = self.bonds.rename(rating_columns, axis=1)
+        self.bonds = self.bonds.loc[self.bonds.rub_price > 0]
+        self.bonds["ratings"] = (
+            self.bonds.price_rating + self.bonds.company_rating
+        ).apply(lambda x: int(x * 100))
+        self.bonds["candle_price"] = self.bonds.figi.apply(
+            lambda x: self._parser.figis_last_candle_prices[x]
+        )
+        self.bonds.to_csv(os.path.join(self._cache_path, "bonds.csv"), index=False)
 
-    def build(self, use_tqdm: bool = True, retry_if_limit: bool = True):
+        shares_price_ratings = self._evaluator.calculate_price_rating(
+            self._parser,
+            self.shares.figi,
+            use_tqdm=use_tqdm,
+            retry_if_limit=retry_if_limit,
+            from_date=from_date,
+            to_date=to_date,
+        )
+        self.shares = self.shares.merge(shares_price_ratings, on="figi", how="inner")
+        self.shares = self.shares.rename(rating_columns, axis=1)
+        self.shares = self.shares[self.shares.rub_price > 0]
+        self.shares["ratings"] = (
+            self.shares.price_rating + self.shares.company_rating
+        ).apply(lambda x: int(x * 100))
+        self.shares["candle_price"] = self.shares.figi.apply(
+            lambda x: self._parser.figis_last_candle_prices[x]
+        )
+        self.shares.to_csv(os.path.join(self._cache_path, "shares.csv"), index=False)
+
+    def build(
+        self,
+        use_tqdm: bool = True,
+        retry_if_limit: bool = True,
+        from_date: datetime = now() - timedelta(days=365),
+        to_date: datetime = now(),
+    ):
         """
         Build all securities (currencies, bonds, shares, and ETFs) and calculate price ranking.
 
         Args:
             use_tqdm (bool): Whether to use tqdm progress bar. Defaults to True.
             retry_if_limit (bool): Whether to retry if the API rate limit is reached. Defaults to True.
+            from_date (datetime): From date to calculate price ranking.
+            to_date (datetime): To date to calculate price ranking.
         """
         with self._parser:
             self.build_currencies()
             self.build_bonds()
             self.build_shares()
             self.build_etfs()
-            self.price_ranking(use_tqdm=use_tqdm, retry_if_limit=retry_if_limit)
+            self.price_ranking(
+                use_tqdm=use_tqdm,
+                retry_if_limit=retry_if_limit,
+                from_date=from_date,
+                to_date=to_date,
+            )
 
-    @staticmethod
-    def cache_check():
+    def cache_check(self):
         """
         Check if cache files for securities exist.
 
@@ -191,12 +245,29 @@ class SecurityVault(object):
             Dict[str, bool]: A dictionary indicating the existence of cache files for each security type.
         """
         return {
-            "folder": os.path.exists("./.cache"),
-            "bonds": os.path.exists("./.cache/bonds.csv"),
-            "etfs": os.path.exists("./.cache/etfs.csv"),
-            "currencies": os.path.exists("./.cache/currencies.csv"),
-            "shares": os.path.exists("./.cache/shares.csv"),
+            "folder": os.path.exists(self._cache_path),
+            "bonds": os.path.exists(os.path.join(self._cache_path, "bonds.csv")),
+            "etfs": os.path.exists(os.path.join(self._cache_path, "etfs.csv")),
+            "currencies": os.path.exists(
+                os.path.join(self._cache_path, "currencies.csv")
+            ),
+            "shares": os.path.exists(os.path.join(self._cache_path, "shares.csv")),
         }
+
+    def get_price(self, figis: list[str], by: str = "rub_price") -> int:
+        current_price = 0
+        bonds_figis = self.bonds.figi.unique()
+        shares_figis = self.shares.figi.unique()
+        etfs_figis = self.etfs.figi.unique()
+
+        for figi in figis:
+            if figi in bonds_figis:
+                current_price += self.bonds.loc[self.bonds.figi == figi][by].values[0]
+            elif figi in shares_figis:
+                current_price += self.shares.loc[self.shares.figi == figi][by].values[0]
+            elif figi in etfs_figis:
+                current_price += self.etfs.loc[self.etfs.figi == figi][by].values[0]
+        return current_price
 
     def _load(self, name):
         """
@@ -207,12 +278,12 @@ class SecurityVault(object):
         """
         match name:
             case "shares":
-                self.shares = pd.read_csv(f"./.cache/{name}.csv")
+                self.shares = pd.read_csv(f"./{self._cache_path}/{name}.csv")
             case "etfs":
-                self.etfs = pd.read_csv(f"./.cache/{name}.csv")
+                self.etfs = pd.read_csv(f"./{self._cache_path}/{name}.csv")
             case "bonds":
-                self.bonds = pd.read_csv(f"./.cache/{name}.csv")
+                self.bonds = pd.read_csv(f"./{self._cache_path}/{name}.csv")
             case "currencies":
-                self.currencies = pd.read_csv(f"./.cache/{name}.csv")
+                self.currencies = pd.read_csv(f"./{self._cache_path}/{name}.csv")
             case _:
                 raise ValueError(f"Invalid name: {name}")

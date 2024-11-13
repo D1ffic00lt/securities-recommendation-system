@@ -1,8 +1,10 @@
 import numpy as np
 import pandas as pd
 
-from ortools.algorithms.python import knapsack_solver
-from ortools.algorithms.python.knapsack_solver import KnapsackSolver
+from ortools.algorithms.python.knapsack_solver import (
+    KnapsackSolver,
+    KNAPSACK_DYNAMIC_PROGRAMMING_SOLVER,
+)
 
 from .storage import SecurityVault
 
@@ -15,8 +17,10 @@ class Security(object):
         price: int | float,
         price_rating: float,
         company_rating: float,
+        final_rating: float,
         sector: str,
         lot: int,
+        type_: str,
     ):
         """
         Initialize the Security class.
@@ -35,7 +39,9 @@ class Security(object):
         self.price_rating = price_rating
         self.company_rating = company_rating
         self.sector = sector
+        self.final_rating = final_rating
         self.lot = lot
+        self.type = type_
         self.name = name
 
     @property
@@ -48,6 +54,8 @@ class Security(object):
             "price_rating": float(self.price_rating),
             "company_rating": float(self.company_rating),
             "name": str(self.name),
+            "final_rating": int(self.final_rating),
+            "type": str(self.type),
         }
 
     def __repr__(self):
@@ -89,6 +97,22 @@ class RecommendationSystem(object):
         """
         self.storage = storage
 
+        number_of_securities = (
+            self.storage.etfs.shape[0]
+            + self.storage.bonds.shape[0]
+            + self.storage.shares.shape[0]
+        )
+
+        self.etfs_capacity_coefficient = (
+            self.storage.etfs.shape[0] + self.storage.bonds.shape[0] // 4
+        ) / number_of_securities
+        self.bonds_capacity_coefficient = (
+            self.storage.bonds.shape[0] // 2
+        ) / number_of_securities
+        self.shares_capacity_coefficient = (
+            self.storage.shares.shape[0] + self.storage.bonds.shape[0] // 4
+        ) / number_of_securities
+
     def recommend(self, portfolio: Portfolio, capacity: int):
         """
         Recommend securities to add to the portfolio based on available capacity.
@@ -97,10 +121,12 @@ class RecommendationSystem(object):
             portfolio (Portfolio): The user's portfolio to which securities are to be added.
             capacity (int): The total capacity to be used for adding new securities.
         """
+
         free_capacity = capacity % 3
-        etfs_capacity = capacity // 3
-        bonds_capacity = capacity // 3
-        shares_capacity = capacity // 3
+
+        bonds_capacity = np.floor(capacity * self.bonds_capacity_coefficient)
+        shares_capacity = np.floor(capacity * self.shares_capacity_coefficient)
+        etfs_capacity = np.floor(capacity * self.etfs_capacity_coefficient)
 
         bonds_sectors_weights = self.storage.bonds.sector.value_counts(normalize=True)
         bonds_sectors_weights *= bonds_capacity
@@ -132,13 +158,13 @@ class RecommendationSystem(object):
         )
 
         money_spent_for_bonds = self._validate_solvers(
-            self.storage.bonds, portfolio, bonds_solvers
+            self.storage.bonds, portfolio, bonds_solvers, type_="bonds"
         )
         money_spent_for_shares = self._validate_solvers(
-            self.storage.shares, portfolio, shares_solvers
+            self.storage.shares, portfolio, shares_solvers, type_="shares"
         )
         money_spent_for_etfs = self._validate_solvers(
-            self.storage.etfs, portfolio, etfs_solvers
+            self.storage.etfs, portfolio, etfs_solvers, type_="etfs"
         )
 
         free_capacity += (
@@ -147,29 +173,34 @@ class RecommendationSystem(object):
             + (etfs_capacity - money_spent_for_etfs)
         )
 
-        infinity_portfolio = self.storage.etfs.loc[
-            self.storage.etfs.figi == "BBG000000001"
-        ].iloc[0]
-        infinity_portfolio.rub_price = np.ceil(infinity_portfolio.rub_price)
+        # infinity_portfolio = self.storage.etfs.loc[
+        #     self.storage.etfs.figi == "BBG000000001"
+        # ].iloc[0]
+        # infinity_portfolio.candle_price = np.ceil(infinity_portfolio.candle_price)
+        #
+        # free_capacity = free_capacity // int(infinity_portfolio.candle_price)
 
-        number_of_etfs = free_capacity // int(infinity_portfolio.rub_price)
-        infinity_portfolio.lot = infinity_portfolio.lot * number_of_etfs
-        infinity_portfolio.rub_price = infinity_portfolio.rub_price * number_of_etfs
-        portfolio.append(
-            Security(
-                figi=infinity_portfolio.figi,
-                price=infinity_portfolio.rub_price,
-                price_rating=infinity_portfolio.price_rating,
-                company_rating=infinity_portfolio.company_rating,
-                sector=infinity_portfolio.sector,
-                lot=infinity_portfolio.lot,
-                name=infinity_portfolio["name"],
-            )
-        )
+        # for _ in range(int(free_capacity)):
+        #     portfolio.append(
+        #         Security(
+        #             figi=infinity_portfolio.figi,
+        #             price=infinity_portfolio.candle_price,
+        #             price_rating=infinity_portfolio.price_rating,
+        #             company_rating=infinity_portfolio.company_rating,
+        #             sector=infinity_portfolio.sector,
+        #             lot=infinity_portfolio.lot,
+        #             name=infinity_portfolio["name"],
+        #             final_rating=infinity_portfolio.ratings,
+        #             type_="etfs",
+        #         )
+        #     )
 
     @staticmethod
     def _validate_solvers(
-        data: pd.DataFrame, portfolio: Portfolio, solvers: dict[str, KnapsackSolver]
+        data: pd.DataFrame,
+        portfolio: Portfolio,
+        solvers: dict[str, KnapsackSolver],
+        type_: str,
     ) -> int:
         """
         Validate and apply solutions from knapsack solvers to add securities to the portfolio.
@@ -188,15 +219,16 @@ class RecommendationSystem(object):
             "price_rating",
             "company_rating",
             "lot",
-            "rub_price",
+            "candle_price",
             "name",
+            "ratings",
         ]
         original_data = data.copy()
         original_data = original_data[valid_columns].dropna()
-        original_data.rub_price = original_data.rub_price.apply(np.ceil).astype(int)
-        original_data["ratings"] = (
-            original_data.price_rating + original_data.company_rating
-        ).apply(lambda x: int(x * 10))
+        original_data = original_data.loc[original_data.candle_price > 0]
+        original_data.candle_price = original_data.candle_price.apply(np.ceil).astype(
+            int
+        )
         original_data.ratings = original_data.ratings.apply(np.ceil).astype(int)
 
         money_spent = 0
@@ -206,16 +238,18 @@ class RecommendationSystem(object):
             for i in range(sector_data.shape[0]):
                 if solver.best_solution_contains(i):
                     value = sector_data.iloc[i]
-                    money_spent += int(value.rub_price)
+                    money_spent += int(value.candle_price)
                     portfolio.append(
                         Security(
                             figi=value.figi,
-                            price=value.rub_price,
+                            price=value.candle_price,
                             price_rating=value.price_rating,
                             company_rating=value.company_rating,
                             sector=value.sector,
                             lot=value.lot,
-                            name=value["name"]
+                            name=value["name"],
+                            final_rating=value.ratings,
+                            type_=type_,
                         )
                     )
         return money_spent
@@ -240,28 +274,29 @@ class RecommendationSystem(object):
             "price_rating",
             "company_rating",
             "lot",
-            "rub_price",
-            "name"
+            "candle_price",
+            "name",
+            "ratings",
         ]
         solvers = {}
 
         original_data = data.copy()
         original_data = original_data[valid_columns].dropna()
-        original_data.rub_price = original_data.rub_price.apply(np.ceil).astype(int)
-        original_data["ratings"] = (
-            original_data.price_rating + original_data.company_rating
-        ).apply(lambda x: int(x * 10))
+        original_data = original_data.loc[original_data.candle_price > 0]
+        original_data.candle_price = original_data.candle_price.apply(np.ceil).astype(
+            int
+        )
         original_data.ratings = original_data.ratings.apply(np.ceil).astype(int)
 
         for sector, weight in sectors_weights.items():
-            solver = knapsack_solver.KnapsackSolver(
-                knapsack_solver.KNAPSACK_DYNAMIC_PROGRAMMING_SOLVER,
+            solver = KnapsackSolver(
+                KNAPSACK_DYNAMIC_PROGRAMMING_SOLVER,
                 f"Knapsack{sector}{np.random.randint(0, 1000)}",
             )
             sector_data = original_data.loc[original_data.sector == sector]
             solver.init(
                 sector_data.ratings.tolist(),
-                [sector_data.rub_price.tolist()],
+                [sector_data.candle_price.tolist()],
                 [int(weight)],
             )
             solvers[str(sector)] = solver
