@@ -127,13 +127,15 @@ class RecommendationSystem(object):
             shares_capacity = np.floor(capacity * self.shares_capacity_coefficient)
             etfs_capacity = np.floor(capacity * self.etfs_capacity_coefficient)
 
-            print(bonds_capacity, shares_capacity, etfs_capacity)
-
-            bonds_sectors_weights = self.storage.bonds.sector.value_counts(normalize=True)
+            bonds_sectors_weights = self.storage.bonds.sector.value_counts(
+                normalize=True
+            )
             bonds_sectors_weights *= bonds_capacity
             bonds_sectors_weights = bonds_sectors_weights.apply(np.ceil)
 
-            shares_sectors_weights = self.storage.shares.sector.value_counts(normalize=True)
+            shares_sectors_weights = self.storage.shares.sector.value_counts(
+                normalize=True
+            )
             shares_sectors_weights *= shares_capacity
             shares_sectors_weights = shares_sectors_weights.apply(np.ceil)
 
@@ -164,7 +166,6 @@ class RecommendationSystem(object):
             capacity -= (
                 money_spent_for_etfs + money_spent_for_shares + money_spent_for_bonds
             )
-
 
         infinity_portfolio = self.storage.etfs.loc[
             self.storage.etfs.figi == "BBG000000001"
