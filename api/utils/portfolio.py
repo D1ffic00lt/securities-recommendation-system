@@ -121,79 +121,72 @@ class RecommendationSystem(object):
             portfolio (Portfolio): The user's portfolio to which securities are to be added.
             capacity (int): The total capacity to be used for adding new securities.
         """
+        previous_capacity = 0
+        while 0 < capacity != previous_capacity:
+            bonds_capacity = np.floor(capacity * self.bonds_capacity_coefficient)
+            shares_capacity = np.floor(capacity * self.shares_capacity_coefficient)
+            etfs_capacity = np.floor(capacity * self.etfs_capacity_coefficient)
 
-        free_capacity = capacity % 3
+            print(bonds_capacity, shares_capacity, etfs_capacity)
 
-        bonds_capacity = np.floor(capacity * self.bonds_capacity_coefficient)
-        shares_capacity = np.floor(capacity * self.shares_capacity_coefficient)
-        etfs_capacity = np.floor(capacity * self.etfs_capacity_coefficient)
+            bonds_sectors_weights = self.storage.bonds.sector.value_counts(normalize=True)
+            bonds_sectors_weights *= bonds_capacity
+            bonds_sectors_weights = bonds_sectors_weights.apply(np.ceil)
 
-        bonds_sectors_weights = self.storage.bonds.sector.value_counts(normalize=True)
-        bonds_sectors_weights *= bonds_capacity
-        bonds_sectors_weights = bonds_sectors_weights.apply(np.ceil)
+            shares_sectors_weights = self.storage.shares.sector.value_counts(normalize=True)
+            shares_sectors_weights *= shares_capacity
+            shares_sectors_weights = shares_sectors_weights.apply(np.ceil)
 
-        free_capacity += bonds_capacity - bonds_sectors_weights.sum()
+            etfs_sectors_weights = self.storage.etfs.sector.value_counts(normalize=True)
+            etfs_sectors_weights *= etfs_capacity
+            etfs_sectors_weights = etfs_sectors_weights.apply(np.ceil)
 
-        shares_sectors_weights = self.storage.shares.sector.value_counts(normalize=True)
-        shares_sectors_weights *= shares_capacity
-        shares_sectors_weights = shares_sectors_weights.apply(np.ceil)
+            bonds_solvers = self._build_recommendation_systems(
+                self.storage.bonds, bonds_sectors_weights
+            )
+            shares_solvers = self._build_recommendation_systems(
+                self.storage.shares, shares_sectors_weights
+            )
+            etfs_solvers = self._build_recommendation_systems(
+                self.storage.etfs, etfs_sectors_weights
+            )
 
-        free_capacity += shares_capacity - shares_sectors_weights.sum()
+            money_spent_for_bonds = self._validate_solvers(
+                self.storage.bonds, portfolio, bonds_solvers, type_="bonds"
+            )
+            money_spent_for_shares = self._validate_solvers(
+                self.storage.shares, portfolio, shares_solvers, type_="shares"
+            )
+            money_spent_for_etfs = self._validate_solvers(
+                self.storage.etfs, portfolio, etfs_solvers, type_="etfs"
+            )
+            previous_capacity = capacity
+            capacity -= (
+                money_spent_for_etfs + money_spent_for_shares + money_spent_for_bonds
+            )
 
-        etfs_sectors_weights = self.storage.etfs.sector.value_counts(normalize=True)
 
-        etfs_sectors_weights *= etfs_capacity
-        etfs_sectors_weights = etfs_sectors_weights.apply(np.ceil)
+        infinity_portfolio = self.storage.etfs.loc[
+            self.storage.etfs.figi == "BBG000000001"
+        ].iloc[0]
+        infinity_portfolio.candle_price = np.ceil(infinity_portfolio.candle_price)
 
-        free_capacity += etfs_capacity - etfs_sectors_weights.sum()
+        free_capacity = capacity // int(infinity_portfolio.candle_price)
 
-        bonds_solvers = self._build_recommendation_systems(
-            self.storage.bonds, bonds_sectors_weights
-        )
-        shares_solvers = self._build_recommendation_systems(
-            self.storage.shares, shares_sectors_weights
-        )
-        etfs_solvers = self._build_recommendation_systems(
-            self.storage.etfs, etfs_sectors_weights
-        )
-
-        money_spent_for_bonds = self._validate_solvers(
-            self.storage.bonds, portfolio, bonds_solvers, type_="bonds"
-        )
-        money_spent_for_shares = self._validate_solvers(
-            self.storage.shares, portfolio, shares_solvers, type_="shares"
-        )
-        money_spent_for_etfs = self._validate_solvers(
-            self.storage.etfs, portfolio, etfs_solvers, type_="etfs"
-        )
-
-        free_capacity += (
-            (bonds_capacity - money_spent_for_bonds)
-            + (shares_capacity - money_spent_for_shares)
-            + (etfs_capacity - money_spent_for_etfs)
-        )
-
-        # infinity_portfolio = self.storage.etfs.loc[
-        #     self.storage.etfs.figi == "BBG000000001"
-        # ].iloc[0]
-        # infinity_portfolio.candle_price = np.ceil(infinity_portfolio.candle_price)
-        #
-        # free_capacity = free_capacity // int(infinity_portfolio.candle_price)
-
-        # for _ in range(int(free_capacity)):
-        #     portfolio.append(
-        #         Security(
-        #             figi=infinity_portfolio.figi,
-        #             price=infinity_portfolio.candle_price,
-        #             price_rating=infinity_portfolio.price_rating,
-        #             company_rating=infinity_portfolio.company_rating,
-        #             sector=infinity_portfolio.sector,
-        #             lot=infinity_portfolio.lot,
-        #             name=infinity_portfolio["name"],
-        #             final_rating=infinity_portfolio.ratings,
-        #             type_="etfs",
-        #         )
-        #     )
+        for _ in range(int(free_capacity)):
+            portfolio.append(
+                Security(
+                    figi=infinity_portfolio.figi,
+                    price=infinity_portfolio.candle_price,
+                    price_rating=infinity_portfolio.price_rating,
+                    company_rating=infinity_portfolio.company_rating,
+                    sector=infinity_portfolio.sector,
+                    lot=infinity_portfolio.lot,
+                    name=infinity_portfolio["name"],
+                    final_rating=infinity_portfolio.ratings,
+                    type_="etfs",
+                )
+            )
 
     @staticmethod
     def _validate_solvers(
