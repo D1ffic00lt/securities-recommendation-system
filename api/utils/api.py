@@ -10,7 +10,7 @@ from .portfolio import RecommendationSystem, Portfolio
 from .storage import SecurityVault
 
 app = FastAPI()
-actual_storage = SecurityVault(cache_path="./.actual_cache")
+actual_storage = SecurityVault(cache_path="./.cache_actual")
 storage = SecurityVault()
 
 with warnings.catch_warnings(action="ignore"):
