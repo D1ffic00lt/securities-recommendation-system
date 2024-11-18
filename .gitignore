@@ -4,6 +4,7 @@
 bonuses.ipynb
 secrets
 **/catboost_info
+.cache*/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
