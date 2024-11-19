@@ -46,18 +46,6 @@ if st.button("Generate portfolio"):
                 title="Types distribution",
             )
             st.plotly_chart(fig)
-
-            st.subheader("Ratings by asset value")
-            fig = px.histogram(df.price_rating, title="Ratings by asset value")
-            st.plotly_chart(fig)
-
-            st.subheader("Ratings according to the company")
-            fig = px.histogram(df.company_rating, title="Ratings according to the company")
-            st.plotly_chart(fig)
-
-            st.subheader("Summary rating")
-            fig = px.histogram(df.final_rating, title="Summary rating")
-            st.plotly_chart(fig)
         else:
             st.error("Failed to retrieve portfolio data. Try again.")
     else:
