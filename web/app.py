@@ -1,3 +1,5 @@
+import random
+
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -5,59 +7,58 @@ import plotly.express as px
 from utils.api import get_portfolio
 from utils.portfolio_analysis import calculate_summary_statistics
 
-st.title("Сбалансированный инвестиционный портфель")
+st.title("Balanced investment portfolio")
 
 investment_sum = st.number_input(
-    "Введите сумму инвестиций (в рублях):", min_value=1, step=1
+    "Enter the amount of investment (in roubles):", min_value=100, step=100
 )
-user_id = st.text_input("Введите ваш ID пользователя:")
 
-if st.button("Сгенерировать портфель"):
-    if investment_sum > 0 and user_id:
-        portfolio = get_portfolio(user_id, investment_sum)
+if st.button("Generate portfolio"):
+    if investment_sum > 0:
+        portfolio = get_portfolio(random.randint(0, 100), investment_sum)
 
         if portfolio:
             df = pd.DataFrame(portfolio)
 
-            st.subheader("Сгенерированный Портфель")
+            st.subheader("Generated portfolio")
             st.write(df.sort_values(by="final_rating", ascending=False))
 
             summary_stats = calculate_summary_statistics(df)
-            st.subheader("Сводная статистика портфеля")
+            st.subheader("Portfolio summary statistics")
             st.write(summary_stats)
 
-            st.subheader("Распределение по секторам")
+            st.subheader("Sectoral distribution")
             sector_distribution = df.groupby("sector")["price"].sum().reset_index()
             fig = px.pie(
                 sector_distribution,
                 names="sector",
                 values="price",
-                title="Распределение по секторам",
+                title="Sectoral distribution",
             )
             st.plotly_chart(fig)
 
-            st.subheader("Распределение по типам")
+            st.subheader("Types distribution")
             types_distribution = df.groupby("type")["price"].sum().reset_index()
             fig = px.pie(
                 types_distribution,
                 names="type",
                 values="price",
-                title="Распределение по типам",
+                title="Types distribution",
             )
             st.plotly_chart(fig)
 
-            st.subheader("Рейтинги по стоимости активов")
-            fig = px.histogram(df.price_rating, title="Рейтинги по стоимости активов")
+            st.subheader("Ratings by asset value")
+            fig = px.histogram(df.price_rating, title="Ratings by asset value")
             st.plotly_chart(fig)
 
-            st.subheader("Рейтинги по данным компании")
-            fig = px.histogram(df.company_rating, title="Рейтинги по данным компании")
+            st.subheader("Ratings according to the company")
+            fig = px.histogram(df.company_rating, title="Ratings according to the company")
             st.plotly_chart(fig)
 
-            st.subheader("Общий рейтинг")
-            fig = px.histogram(df.final_rating, title="Общий рейтинг")
+            st.subheader("Summary rating")
+            fig = px.histogram(df.final_rating, title="Summary rating")
             st.plotly_chart(fig)
         else:
-            st.error("Не удалось получить данные портфеля. Попробуйте еще раз.")
+            st.error("Failed to retrieve portfolio data. Try again.")
     else:
-        st.warning("Пожалуйста, заполните все поля.")
+        st.warning("Please fill in all fields.")
