@@ -1,10 +1,9 @@
 import warnings
-from datetime import timedelta
-
 import uvicorn
 
 from fastapi import FastAPI, Request
 from tinkoff.invest.utils import now
+from datetime import timedelta
 
 from .portfolio import RecommendationSystem, Portfolio
 from .storage import SecurityVault
